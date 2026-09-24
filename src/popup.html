@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Video Grabber</h1>
+      <span id="count" class="badge">0</span>
+    </header>
+
+    <div class="toolbar">
+      <button id="rescan" class="btn primary" title="Quét lại trang, bao gồm cả HTML nhúng của Facebook">
+        Quét sâu
+      </button>
+      <button id="copyAll" class="btn" title="Copy tất cả URL đang hiển thị">Copy</button>
+      <button id="clear" class="btn" title="Xoá danh sách của tab này">Xoá</button>
+    </div>
+
+    <div id="filters" class="filters">
+      <button class="chip active" data-kind="all">Tất cả</button>
+      <button class="chip" data-kind="file">File</button>
+      <button class="chip" data-kind="yt-adaptive">YT-Adapt</button>
+    </div>
+
+    <ul id="list" class="list"></ul>
+
+    <div id="empty" class="empty">
+      <p>Chưa bắt được video nào.</p>
+      <p class="hint">
+        Mở trang có video rồi <b>bấm play</b> để extension thấy luồng dữ liệu.<br />
+        Với Facebook: mở bài viết trong group, bấm vào video, rồi bấm
+        <b>Quét sâu</b>.
+      </p>
+    </div>
+
+    <div id="ytNotice" class="yt-notice hidden">
+      <div class="yt-notice-icon">▶️</div>
+      <p class="yt-notice-title">YouTube — đã hỗ trợ</p>
+      <p class="yt-notice-desc">
+        Link <b>file</b> = video+audio (tải trực tiếp).<br />
+        Link <b>yt-adapt</b> = chỉ hình hoặc chỉ tiếng (cần ghép bằng ffmpeg).<br />
+        Tốc độ tải có thể bị YouTube giới hạn — kiên nhẫn chờ.
+      </p>
+    </div>
+
+    <details id="diagWrap" class="diag">
+      <summary>Chẩn đoán</summary>
+      <pre id="diag">Đang kiểm tra…</pre>
+    </details>
+
+    <footer>
+      <button id="downloadAll" class="btn primary wide" disabled>Tải tất cả</button>
+      <div id="status" class="status"></div>
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,43 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {
+          "header": "Referer",
+          "operation": "set",
+          "value": "https://www.facebook.com/"
+        }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||fbcdn.net",
+      "resourceTypes": ["media", "other", "object", "xmlhttprequest"]
+    }
+  },
+  {
+    "id": 2,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {
+          "header": "Referer",
+          "operation": "set",
+          "value": "https://www.youtube.com/"
+        },
+        {
+          "header": "Origin",
+          "operation": "set",
+          "value": "https://www.youtube.com"
+        }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||googlevideo.com",
+      "resourceTypes": ["media", "other", "object", "xmlhttprequest"]
+    }
+  }
+]
