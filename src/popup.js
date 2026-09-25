@@ -29,7 +29,7 @@ const el = {
 
 let tabId = null;
 let allItems = [];
-let kindFilter = 'all';
+let kindFilter = 'current';
 
 const KIND_LABEL = {
   file: 'file',
@@ -118,6 +118,7 @@ async function runDiag() {
     lines.push(`  network  : ${s.fromNetwork || 0}`);
     lines.push(`  dom      : ${s.fromDom || 0}`);
     lines.push(`  fb-json  : ${s.fromFbJson || 0}`);
+    lines.push(`  ig-json  : ${s.fromIgJson || 0}`);
     lines.push(`  bị loại  : ${s.rejected || 0}`);
     lines.push(`  lỗi gửi  : ${s.sendErrors || 0}`);
 
@@ -185,16 +186,62 @@ async function load() {
 
   const key = 'tab:' + tabId;
   const store = await chrome.storage.session.get(key);
-  allItems = (store[key] || []).slice().sort((a, b) => {
-    const d = (KIND_ORDER[a.kind] ?? 9) - (KIND_ORDER[b.kind] ?? 9);
-    return d !== 0 ? d : a.foundAt - b.foundAt;
+  const facebookTab = (() => {
+    try { return /(^|\.)(facebook\.com|fb\.com)$/i.test(new URL(tab.url).hostname); }
+    catch { return false; }
+  })();
+  const isFacebookItem = (item) => {
+    try { return /(^|\.)(facebook\.com|fb\.com)$/i.test(new URL(item.pageUrl).hostname); }
+    catch { return false; }
+  };
+  allItems = (store[key] || []).filter((item) => {
+    if (!facebookTab || !isFacebookItem(item)) return true;
+    try {
+      const media = new URL(item.url);
+      return !/(^|\.)fbcdn\.net$/i.test(media.hostname)
+        || (!media.searchParams.has('bytestart') && !media.searchParams.has('byteend'));
+    } catch { return true; }
+  }).sort((a, b) => {
+    // 1. Video đang phát / vừa lướt tới LUÔN xếp đầu tiên
+    if (a.isCurrent && !b.isCurrent) return -1;
+    if (!a.isCurrent && b.isCurrent) return 1;
+    // 2. Mới phát / mới lướt tới nhất lên trên cùng
+    const timeDiff = (b.foundAt || 0) - (a.foundAt || 0);
+    if (timeDiff !== 0) return timeDiff;
+    // 3. Kind order
+    return (KIND_ORDER[a.kind] ?? 9) - (KIND_ORDER[b.kind] ?? 9);
   });
+  if (facebookTab) {
+    const byPath = new Map();
+    allItems = allItems.filter((item) => {
+      if (!isFacebookItem(item)) return true;
+      let media;
+      try { media = new URL(item.url); } catch { return true; }
+      if (!/(^|\.)fbcdn\.net$/i.test(media.hostname)) return true;
+      const key = media.pathname;
+      const existing = byPath.get(key);
+      if (existing) {
+        if ((item.foundAt || 0) > (existing.foundAt || 0)) {
+          existing.url = item.url;
+          existing.host = item.host;
+          existing.foundAt = item.foundAt;
+        }
+        existing.isCurrent = !!(existing.isCurrent || item.isCurrent);
+        return false;
+      }
+      byPath.set(key, item);
+      return true;
+    });
+  }
 
   render();
   await runDiag();
 }
 
 function visibleItems() {
+  if (kindFilter === 'current') {
+    return allItems.filter((i) => i.isCurrent);
+  }
   return kindFilter === 'all' ? allItems : allItems.filter((i) => i.kind === kindFilter);
 }
 
@@ -204,6 +251,12 @@ function render() {
   el.count.textContent = String(allItems.length);
   el.list.textContent = '';
   el.empty.classList.toggle('hidden', items.length > 0);
+  const emptyText = el.empty.querySelector('p');
+  if (emptyText) {
+    emptyText.textContent = kindFilter === 'current' && allItems.length
+      ? 'Chưa xác định được video đang xem. Xem mục Tất cả để thấy các link đã bắt.'
+      : 'Chưa bắt được video nào.';
+  }
   el.list.classList.toggle('hidden', items.length === 0);
   el.downloadAll.disabled = items.length === 0;
 
@@ -212,42 +265,210 @@ function render() {
   el.list.appendChild(frag);
 }
 
+function parseItemInfo(item) {
+  let platform = 'generic';
+  let platformName = 'Video File';
+  let title = item.pageTitle || 'Video';
+  let quality = 'MP4';
+  let shortcode = '';
+
+  const host = item.host || '';
+  const pageUrl = item.pageUrl || '';
+  const url = item.url || '';
+  const facebookPage = /(^|\.)(facebook\.com|fb\.com)$/i.test((() => {
+    try { return new URL(pageUrl).hostname; } catch { return ''; }
+  })());
+
+  // 1. YouTube
+  if (item.ytMeta) {
+    platform = 'youtube';
+    platformName = 'YouTube';
+    title = item.ytMeta.title || item.pageTitle || 'YouTube Video';
+    quality = item.ytMeta.quality || (item.ytMeta.isAudio ? 'Audio' : 'Video');
+  }
+  // 2. Instagram
+  else if (
+    host.includes('instagram') ||
+    pageUrl.includes('instagram.com') ||
+    (item.label && item.label.includes('Instagram')) ||
+    (!facebookPage && (url.includes('/o1/v/t16/') || url.includes('/v/t50.')))
+  ) {
+    platform = 'instagram';
+    platformName = 'Instagram';
+
+    const matchReel = pageUrl.match(/(?:reel|reels|p)\/([A-Za-z0-9_-]+)/i);
+    if (matchReel) {
+      shortcode = matchReel[1];
+    }
+
+    if (item.pageTitle) {
+      const igTitleMatch = item.pageTitle.match(/^(.+?)\s+on Instagram:\s*["“](.+?)["”]?$/i);
+      if (igTitleMatch) {
+        title = `${igTitleMatch[1]}: ${igTitleMatch[2]}`;
+      } else {
+        title = item.pageTitle.replace(/\s*•\s*Instagram.*$/i, '').trim();
+      }
+    } else if (shortcode) {
+      title = `Instagram Reel [${shortcode}]`;
+    } else {
+      title = 'Instagram Video';
+    }
+
+    quality = 'HD MP4';
+  }
+  // 3. Facebook
+  else if (host.includes('fbcdn') || host.includes('facebook') || pageUrl.includes('facebook.com')) {
+    platform = 'facebook';
+    platformName = 'Facebook';
+    if (item.label === 'browser_native_hd_url') quality = 'HD';
+    else if (item.label === 'browser_native_sd_url') quality = 'SD';
+    else quality = item.label || 'MP4';
+
+    if (item.pageTitle) {
+      title = item.pageTitle.replace(/\s*\|\s*Facebook.*$/i, '').trim();
+    } else {
+      title = 'Facebook Video';
+    }
+  }
+
+  // Tên file dự kiến
+  let filename = 'video.mp4';
+  if (shortcode) {
+    filename = `instagram_${shortcode}.mp4`;
+  } else {
+    try {
+      const u = new URL(url);
+      const last = u.pathname.split('/').filter(Boolean).pop() || '';
+      if (last && /\.[a-z0-9]{2,5}$/i.test(last)) filename = decodeURIComponent(last);
+      else if (platform === 'instagram') filename = `instagram_video.mp4`;
+      else filename = 'video.mp4';
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return { platform, platformName, title, quality, filename, shortcode };
+}
+
 function renderItem(item) {
+  const info = parseItemInfo(item);
   const li = document.createElement('li');
   li.className = 'item';
 
-  const top = document.createElement('div');
-  top.className = 'item-top';
+  // Header: Icon + Title + Tags
+  const header = document.createElement('div');
+  header.className = 'item-header';
 
-  const kind = document.createElement('span');
-  kind.className = 'kind ' + item.kind;
-  kind.textContent = KIND_LABEL[item.kind] || item.kind;
+  const icon = document.createElement('div');
+  icon.className = `platform-badge-icon ${info.platform}`;
+  icon.textContent =
+    info.platform === 'instagram'
+      ? '📸'
+      : info.platform === 'facebook'
+      ? '🔵'
+      : info.platform === 'youtube'
+      ? '▶️'
+      : '🎬';
 
-  const host = document.createElement('span');
-  host.className = 'host';
-  host.textContent = item.host;
-  host.title = item.host;
+  const main = document.createElement('div');
+  main.className = 'item-main';
 
-  const src = document.createElement('span');
-  src.className = 'src';
-  src.textContent = item.label || item.sources[0];
+  const titleEl = document.createElement('div');
+  titleEl.className = 'item-title';
+  titleEl.textContent = info.title;
+  titleEl.title = info.title;
 
-  top.append(kind, host, src);
+  const tags = document.createElement('div');
+  tags.className = 'item-tags';
 
-  const url = document.createElement('div');
-  url.className = 'url';
-  url.textContent = item.url;
+  const tagPlat = document.createElement('span');
+  tagPlat.className = `tag-badge platform ${info.platform}`;
+  tagPlat.textContent = info.platformName;
 
+  const tagQual = document.createElement('span');
+  tagQual.className = 'tag-badge quality';
+  tagQual.textContent = info.quality;
+
+  const tagHost = document.createElement('span');
+  tagHost.className = 'tag-badge subtle';
+  tagHost.textContent = item.host;
+  tagHost.title = item.url;
+
+  tags.append(tagPlat, tagQual, tagHost);
+
+  const isHot = !!item.isCurrent;
+  if (isHot) {
+    li.classList.add('active-now');
+    const tagHot = document.createElement('span');
+    tagHot.className = 'tag-badge hot-now';
+    tagHot.textContent = '🔥 ĐANG XEM';
+    tags.prepend(tagHot);
+  }
+
+  main.append(titleEl, tags);
+  header.append(icon, main);
+
+  // Dòng hiển thị tên file sẽ lưu
+  const fileNameRow = document.createElement('div');
+  fileNameRow.className = 'file-preview-name';
+  fileNameRow.textContent = `💾 ${info.filename}`;
+  fileNameRow.title = item.url;
+
+  // Hộp Preview video (ẩn mặc định)
+  const playerWrap = document.createElement('div');
+  playerWrap.className = 'item-preview-player';
+
+  // Hàng nút hành động
   const row = document.createElement('div');
   row.className = 'row';
 
+  const btnPreview = document.createElement('button');
+  btnPreview.className = 'btn preview-btn';
+  btnPreview.textContent = '👁️ Xem thử';
+
+  let isPreviewing = false;
+  let previewTimer = null;
+  btnPreview.addEventListener('click', () => {
+    isPreviewing = !isPreviewing;
+    if (isPreviewing) {
+      playerWrap.innerHTML = '';
+      const video = document.createElement('video');
+      video.src = item.url;
+      video.controls = true;
+      video.autoplay = true;
+      video.muted = true;
+      video.playsInline = true;
+      if (info.platform === 'facebook') {
+        const showPreviewError = () => {
+          if (!isPreviewing || !video.isConnected) return;
+          playerWrap.textContent = 'Không phát được bản xem thử. Link có thể đã hết hạn hoặc chỉ chứa luồng hình.';
+        };
+        video.addEventListener('loadeddata', () => clearTimeout(previewTimer), { once: true });
+        video.addEventListener('error', showPreviewError, { once: true });
+        previewTimer = setTimeout(() => {
+          if (video.readyState === 0) showPreviewError();
+        }, 10000);
+      }
+      playerWrap.appendChild(video);
+      playerWrap.classList.add('show');
+      btnPreview.textContent = '✖ Đóng xem';
+      btnPreview.classList.add('active');
+    } else {
+      clearTimeout(previewTimer);
+      playerWrap.innerHTML = '';
+      playerWrap.classList.remove('show');
+      btnPreview.textContent = '👁️ Xem thử';
+      btnPreview.classList.remove('active');
+    }
+  });
+
   const dl = document.createElement('button');
-  dl.className = 'btn primary';
-  dl.textContent = 'Tải';
+  dl.className = 'btn primary dl-btn';
+  dl.textContent = '⬇️ Tải';
   dl.addEventListener('click', () => runDownload([item], dl));
 
   const cp = document.createElement('button');
-  cp.className = 'btn';
+  cp.className = 'btn copy-btn';
   cp.textContent = 'Copy';
   cp.addEventListener('click', async () => {
     await navigator.clipboard.writeText(item.url);
@@ -255,8 +476,9 @@ function renderItem(item) {
     setTimeout(() => (cp.textContent = 'Copy'), 1200);
   });
 
-  row.append(dl, cp);
-  li.append(top, url, row);
+  row.append(btnPreview, dl, cp);
+
+  li.append(header, fileNameRow, playerWrap, row);
   return li;
 }
 
@@ -271,7 +493,12 @@ async function runDownload(items, button) {
 
   const res = await chrome.runtime.sendMessage({
     type: 'popup:download',
-    items: items.map((i) => ({ url: i.url, ytMeta: i.ytMeta || null })),
+    items: items.map((i) => ({
+      url: i.url,
+      ytMeta: i.ytMeta || null,
+      pageUrl: i.pageUrl || null,
+      pageTitle: i.pageTitle || null,
+    })),
   });
 
   const ids = ((res && res.results) || []).map((r) => r.id).filter(Boolean);

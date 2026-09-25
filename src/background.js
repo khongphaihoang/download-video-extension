@@ -50,19 +50,62 @@ async function writeItems(tabId, list) {
   updateBadge(tabId, list.length);
 }
 
+function facebookMediaKey(item) {
+  try {
+    const page = new URL(item.pageUrl);
+    const media = new URL(item.url);
+    if (!/(^|\.)(facebook\.com|fb\.com)$/i.test(page.hostname)
+      || !/(^|\.)fbcdn\.net$/i.test(media.hostname)) return item.url;
+    return 'fbcdn:' + media.pathname;
+  } catch {
+    return item.url;
+  }
+}
+
 async function addItems(tabId, incoming) {
   const current = await readItems(tabId);
-  const seen = new Set(current.map((i) => i.url));
+  const byKey = new Map(current.map((i) => [facebookMediaKey(i), i]));
   let changed = false;
   for (const item of incoming) {
-    if (!item || !item.url || seen.has(item.url)) continue;
-    seen.add(item.url);
+    if (!item || !item.url) continue;
+    try {
+      const page = new URL(item.pageUrl);
+      const media = new URL(item.url);
+      if (/(^|\.)(facebook\.com|fb\.com)$/i.test(page.hostname)
+        && /(^|\.)fbcdn\.net$/i.test(media.hostname)
+        && (media.searchParams.has('bytestart') || media.searchParams.has('byteend'))) continue;
+    } catch { /* keep generic URLs unchanged */ }
+    const key = facebookMediaKey(item);
+    const existing = byKey.get(key);
+    if (existing) {
+      if (existing.url !== item.url && key.startsWith('fbcdn:')) {
+        existing.url = item.url;
+        existing.host = item.host;
+        changed = true;
+      }
+      if (Array.isArray(item.sources)) {
+        existing.sources = [...new Set([...(existing.sources || []), ...item.sources])];
+      }
+      if (item.isCurrent) {
+        for (const it of current) it.isCurrent = false;
+        existing.isCurrent = true;
+        existing.foundAt = item.foundAt || Date.now();
+        if (item.title) existing.title = item.title;
+        if (item.pageUrl) existing.pageUrl = item.pageUrl;
+        changed = true;
+      }
+      continue;
+    }
+    if (item.isCurrent) {
+      for (const it of current) it.isCurrent = false;
+    }
+    byKey.set(key, item);
     current.push(item);
     changed = true;
   }
   if (changed) {
     await writeItems(tabId, current);
-    log.info(`[Tab ${tabId}] Đã lưu ${incoming.length} link mới. Tổng: ${current.length}`);
+    log.info(`[Tab ${tabId}] Đã lưu/cập nhật link. Tổng: ${current.length}`);
   }
   return current.length;
 }
@@ -75,9 +118,10 @@ function updateBadge(tabId, count) {
 
 // --------------------------------------------------------------- tải file
 
-/** Rút tên file an toàn từ URL. Dùng ytMeta nếu có (YouTube). */
-function filenameFor(url, index, ytMeta) {
+/** Rút tên file an toàn từ URL. Dùng ytMeta nếu có (YouTube) hoặc shortcode (Instagram). */
+function filenameFor(url, index, meta) {
   let base = 'video';
+  const ytMeta = (meta && meta.ytMeta) || null;
 
   // YouTube: dùng title video + quality label
   if (ytMeta && ytMeta.title) {
@@ -86,6 +130,9 @@ function filenameFor(url, index, ytMeta) {
     const isAudio = ytMeta.isAudio;
     const ext = isAudio ? '.webm' : '.mp4';
     base = safe + (quality ? ' [' + quality + ']' : '') + ext;
+  } else if (meta && meta.pageUrl && /instagram\.com\/(?:reel|reels|p)\/([A-Za-z0-9_-]+)/i.test(meta.pageUrl)) {
+    const igMatch = meta.pageUrl.match(/instagram\.com\/(?:reel|reels|p)\/([A-Za-z0-9_-]+)/i);
+    base = `instagram_${igMatch[1]}.mp4`;
   } else {
     try {
       const u = new URL(url);
@@ -104,8 +151,8 @@ function filenameFor(url, index, ytMeta) {
 
 async function downloadOne(item, index, total) {
   const url = typeof item === 'string' ? item : item.url;
-  const ytMeta = (item && item.ytMeta) || null;
-  const filename = filenameFor(url, total > 1 ? index : null, ytMeta);
+  const meta = typeof item === 'object' ? item : null;
+  const filename = filenameFor(url, total > 1 ? index : null, meta);
   try {
     log.info(`Đang tải (${index + 1}/${total}): ${filename}`, url);
     const id = await chrome.downloads.download({

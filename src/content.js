@@ -39,7 +39,7 @@
 
   // CDN phát video phổ biến — nhận cả URL không có đuôi file (MSE/DASH).
   const MEDIA_HOST_RE =
-    /(^|\.)(video[^.]*\.fbcdn\.net|fbcdn\.net|googlevideo\.com|video\.twimg\.com|vimeocdn\.com|tiktokcdn\.com|tiktokcdn-us\.com|akamaized\.net|cloudfront\.net|mux\.com|bunnycdn\.com|streamable\.com|dailymotion\.com|jwplayer\.com|brightcove\.net|kaltura\.com)$/i;
+    /(^|\.)(video[^.]*\.fbcdn\.net|fbcdn\.net|cdninstagram\.com|googlevideo\.com|video\.twimg\.com|vimeocdn\.com|tiktokcdn\.com|tiktokcdn-us\.com|akamaized\.net|cloudfront\.net|mux\.com|bunnycdn\.com|streamable\.com|dailymotion\.com|jwplayer\.com|brightcove\.net|kaltura\.com)$/i;
 
   // YouTube DASH segment — tải riêng lẻ không xem được (thiếu audio hoặc chỉ là 1 chunk)
   const YOUTUBE_HOST_RE = /(^|\.)googlevideo\.com$/i;
@@ -52,6 +52,11 @@
     'hd_src',
     'sd_src',
     'progressive_url',
+  ];
+
+  const IG_KEYS = [
+    'video_url',
+    'playback_url',
   ];
 
   // Logger có màu cho content script
@@ -90,8 +95,11 @@
   /** @type {Map<string, object>} url -> item */
   const items = new Map();
   const seenNodes = new WeakSet();
+  const seenIgNodes = new WeakSet();
   const sent = new Set();
   let flushTimer = null;
+  let activeFbMediaPath = null;
+  let activeFbMediaAt = 0;
 
   /** Đếm theo nguồn — dùng cho panel chẩn đoán trong popup. */
   const stats = {
@@ -99,6 +107,7 @@
     fromNetwork: 0,
     fromDom: 0,
     fromFbJson: 0,
+    fromIgJson: 0,
     fromYt: 0,
     fromMsg: 0,
     fromSeg: 0,
@@ -111,6 +120,7 @@
     else if (source === 'yt') stats.fromYt++;
     else if (source === 'network') stats.fromNetwork++;
     else if (source === 'fb-json') stats.fromFbJson++;
+    else if (source === 'ig-json') stats.fromIgJson++;
     else if (source === 'msg') stats.fromMsg++;
     else if (source === 'seg') stats.fromSeg++;
     else stats.fromDom++;
@@ -155,22 +165,82 @@
     return 'file';
   }
 
+  function cleanMediaUrl(raw) {
+    if (typeof raw !== 'string') return raw;
+    try {
+      const u = new URL(raw);
+      if (u.searchParams.has('bytestart') || u.searchParams.has('byteend')) {
+        // On Facebook this is a stream segment, not proof of a complete file.
+        const facebookPage = /(^|\.)(facebook\.com|fb\.com)$/i.test(location.hostname);
+        if (!facebookPage && /(^|\.)(fbcdn\.net|cdninstagram\.com)$/i.test(u.hostname)) {
+          u.searchParams.delete('bytestart');
+          u.searchParams.delete('byteend');
+          return u.toString();
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    return raw;
+  }
+
   /**
    * `add` cố tình dễ tính — người gọi đã tự lọc rồi. Ở đây chỉ chặn rác rõ ràng.
    * @returns {boolean} true nếu là URL mới.
    */
   function add(raw, source, extra) {
-    const url = normalize(raw);
+    const cleaned = cleanMediaUrl(raw);
+    const url = normalize(cleaned);
     if (!url) return false;
+    // Match an active FB stream segment to a complete candidate by CDN path.
+    // The segment itself must never be offered as a downloadable file.
+    const facebookPage = /(^|\.)(facebook\.com|fb\.com)$/i.test(location.hostname);
+    let fbMediaPath = null;
+    try {
+      const media = new URL(url);
+      if (facebookPage && /(^|\.)fbcdn\.net$/i.test(media.hostname)) {
+        fbMediaPath = media.pathname;
+        if ((media.searchParams.has('bytestart') || media.searchParams.has('byteend'))
+          && (source === 'inject:fetch' || source === 'inject:xhr') && extra && extra.isCurrent) {
+          activeFbMediaPath = fbMediaPath;
+          activeFbMediaAt = Date.now();
+          const match = [...items.values()].find((item) => {
+            try { return new URL(item.url).pathname === fbMediaPath; }
+            catch { return false; }
+          });
+          if (match) add(match.url, 'fb-active-range', { isCurrent: true });
+        }
+      }
+    } catch { /* ignore */ }
     if (BAD_RE.test(url)) {
       addLog('reject', source, url, { reason: 'Trùng BAD_RE (ảnh/style/script/segment/manifest)' });
       return false;
     }
 
     const host = hostOf(url);
-    // scontent là host ảnh của Facebook — chặn, TRỪ khi URL có đuôi media rõ ràng.
-    if (/^scontent/i.test(host) && !FILE_RE.test(url)) {
-      addLog('reject', source, url, { reason: 'Host scontent (ảnh FB, không có đuôi file video)' });
+    // Instagram cũng dùng scontent cho video không có đuôi file.
+    const instagramVideo = /(^|\.)instagram\.com$/i.test(location.hostname)
+      && /(^|\.)(fbcdn\.net|cdninstagram\.com)$/i.test(host)
+      && (source === 'ig-json' || source === 'inject:ig-response'
+        || source === 'inject:ig-single-post' || source === 'inject:shortcode-match'
+        || source === 'inject:shortcode-resolved' || source === 'inject:react-fiber'
+        || source === 'video-tag' || source === 'source-tag'
+        || source === 'inject:media-src' || source === 'inject:video-src'
+        || (source === 'network-media' && extra && extra.label === 'video')
+        || /\/(?:o1\/v\/t16|v\/t50\.)/i.test(url));
+    const facebookVideo = /(^|\.)(facebook\.com|fb\.com)$/i.test(location.hostname)
+      && /(^|\.)fbcdn\.net$/i.test(host)
+      && (source === 'fb-json' || source === 'inject:fb-response'
+        || source === 'inject:fb-single-post' || source === 'inject:fb-id-match'
+        || source === 'inject:shortcode-resolved' || source === 'inject:react-fiber');
+    if (/^scontent/i.test(host) && !FILE_RE.test(url) && !instagramVideo && !facebookVideo) {
+      addLog('reject', source, url, { reason: 'Host scontent không có bằng chứng là video' });
+      return false;
+    }
+
+    // Chặn ảnh Instagram giả dạng video: chứa /t51. (photos) hoặc query dst-jpg/dst-webp
+    if (/(\/v\/t51\.|\/t51\.2885|dst-jpg|dst-webp)/i.test(url) && !FILE_RE.test(url)) {
+      addLog('reject', source, url, { reason: 'Ảnh Instagram (t51/dst-jpg, không phải video)' });
       return false;
     }
 
@@ -182,19 +252,34 @@
       return false;
     }
 
-    const looksMedia = FILE_RE.test(url) || MEDIA_HOST_RE.test(host) || source === 'fb-json'
-      || (typeof source === 'string' && source.startsWith('inject:fb-'))
-      || isFromYtParser;
+    const isIg = host.includes('instagram') || url.includes('/o1/v/t16/') || (typeof source === 'string' && source.includes('ig'));
+    const looksMedia = FILE_RE.test(url) || MEDIA_HOST_RE.test(host) || source === 'fb-json' || source === 'ig-json'
+      || (typeof source === 'string' && (source.startsWith('inject:fb-') || source.startsWith('inject:ig-')))
+      || isIg || isFromYtParser;
     if (!looksMedia) {
       stats.rejected++;
       addLog('reject', source, url, { reason: 'Không có đuôi video và không nằm trong Media Host list' });
       return false;
     }
 
+    const defaultLabel = isIg ? 'Instagram Video' : null;
+    const finalLabel = (extra && extra.label) || defaultLabel;
+
+    const isCurrent = !!(extra && extra.isCurrent)
+      || !!(fbMediaPath && fbMediaPath === activeFbMediaPath && Date.now() - activeFbMediaAt < 10000);
     const existing = items.get(url);
     if (existing) {
       if (!existing.sources.includes(source)) existing.sources.push(source);
-      if (extra && extra.label && !existing.label) existing.label = extra.label;
+      if (finalLabel && !existing.label) existing.label = finalLabel;
+      if (isCurrent) {
+        for (const it of items.values()) it.isCurrent = false;
+        existing.isCurrent = true;
+        existing.foundAt = Date.now();
+        existing._needsUpdate = true;
+        if (extra && extra.title) existing.title = extra.title;
+        if (extra && extra.pageUrl) existing.pageUrl = extra.pageUrl;
+        scheduleFlush();
+      }
       return false;
     }
 
@@ -211,15 +296,21 @@
       return false;
     }
 
+    if (isCurrent) {
+      for (const it of items.values()) it.isCurrent = false;
+    }
+
     const newItem = {
       url,
       host,
       kind,
       sources: [source],
-      label: (extra && extra.label) || null,
+      label: finalLabel,
       poster: (extra && extra.poster) || null,
-      pageUrl: location.href,
-      pageTitle: document.title,
+      title: (extra && extra.title) || null,
+      isCurrent: isCurrent,
+      pageUrl: (extra && extra.pageUrl) || location.href,
+      pageTitle: (extra && extra.title) || document.title,
       foundAt: Date.now(),
       // metadata YouTube (nếu có)
       ytMeta: (extra && extra.ytMeta) || null,
@@ -242,8 +333,9 @@
     flushTimer = null;
     const batch = [];
     for (const item of items.values()) {
-      if (sent.has(item.url)) continue;
+      if (sent.has(item.url) && !item._needsUpdate) continue;
       sent.add(item.url);
+      item._needsUpdate = false;
       batch.push(item);
     }
     if (!batch.length) return;
@@ -281,8 +373,8 @@
       return;
     }
 
-    // Truyền metadata YouTube qua extra
-    const extra = d.meta ? { label: d.meta.label, ytMeta: d.meta } : undefined;
+    // Truyền toàn bộ metadata (isCurrent, title, pageUrl, label, ytMeta...)
+    const extra = d.meta ? { ...d.meta } : undefined;
     const source = 'inject:' + d.via;
     if (add(d.url, source, extra)) {
       const isYt = d.via && d.via.startsWith('yt-');
@@ -369,10 +461,108 @@
       seenNodes.add(s);
       const t = s.textContent;
       if (!t || t.length < 80) return;
-      if (!t.includes('browser_native') && !t.includes('playable_url') && !t.includes('hd_src')) {
+      if (!t.includes('browser_native') && !t.includes('playable_url')
+        && !t.includes('hd_src') && !t.includes('sd_src') && !t.includes('progressive_url')) {
         return;
       }
       extractFbJson(t);
+    });
+  }
+
+  // ------------------------------------------ nguồn 4: JSON nhúng Instagram
+
+  function extractIgJson(text) {
+    if (!text || text.length < 80) return;
+    if (
+      !text.includes('video_versions') &&
+      !text.includes('video_url') &&
+      !text.includes('playback_url') &&
+      !text.includes('video_resources') &&
+      !text.includes('/t16/') &&
+      !text.includes('/t50.') &&
+      !text.includes('BaseURL')
+    ) {
+      return;
+    }
+
+    // 1. Quét các key trực tiếp: video_url, playback_url
+    for (const key of IG_KEYS) {
+      const re = new RegExp('"' + key + '"\\s*:\\s*"([^"]{20,4000})"', 'g');
+      let m;
+      while ((m = re.exec(text)) !== null) {
+        const url = unescapeJson(m[1]);
+        if (/^https?:\/\//i.test(url) && add(url, 'ig-json', { label: key })) {
+          bumpStat('ig-json');
+        }
+      }
+    }
+
+    // 2. Quét block "video_versions": [...]
+    const vvRe = /"video_versions"\s*:\s*\[([\s\S]*?)\]/g;
+    let vm;
+    while ((vm = vvRe.exec(text)) !== null) {
+      const block = vm[1];
+      const urlRe = /"url"\s*:\s*"([^"]{20,4000})"/g;
+      let um;
+      while ((um = urlRe.exec(block)) !== null) {
+        const url = unescapeJson(um[1]);
+        if (/^https?:\/\//i.test(url) && add(url, 'ig-json', { label: 'ig-version' })) {
+          bumpStat('ig-json');
+        }
+      }
+    }
+
+    // 3. Quét block "video_resources": [...]
+    const vrRe = /"video_resources"\s*:\s*\[([\s\S]*?)\]/g;
+    let rm;
+    while ((rm = vrRe.exec(text)) !== null) {
+      const block = rm[1];
+      const srcRe = /"src"\s*:\s*"([^"]{20,4000})"/g;
+      let sm;
+      while ((sm = srcRe.exec(block)) !== null) {
+        const url = unescapeJson(sm[1]);
+        if (/^https?:\/\//i.test(url) && add(url, 'ig-json', { label: 'ig-resource' })) {
+          bumpStat('ig-json');
+        }
+      }
+    }
+
+    // 4. Quét BaseURL trong video_dash_manifest
+    const buRe = /<BaseURL>([^<]{20,4000})<\/BaseURL>/g;
+    let bm;
+    while ((bm = buRe.exec(text)) !== null) {
+      const url = unescapeJson(bm[1]);
+      if (/^https?:\/\//i.test(url) && add(url, 'ig-json', { label: 'ig-manifest' })) {
+        bumpStat('ig-json');
+      }
+    }
+
+    // 5. Quét regex trực tiếp format video Instagram (/t16/ hoặc /t50.)
+    const igDirectRe = /https?:\\\/\\\/[a-zA-Z0-9.-]*(?:cdninstagram\.com|fbcdn\.net)\\\/(?:o1\\\/v\\\/t16|v\\\/t50\.)[^\s"'\\]+/g;
+    let dm;
+    while ((dm = igDirectRe.exec(text)) !== null) {
+      const url = unescapeJson(dm[0]);
+      if (/^https?:\/\//i.test(url) && add(url, 'ig-json', { label: 'Instagram Video' })) {
+        bumpStat('ig-json');
+      }
+    }
+  }
+
+  function scanIgScripts() {
+    document.querySelectorAll('script').forEach((s) => {
+      if (seenIgNodes.has(s)) return;
+      seenIgNodes.add(s);
+      const t = s.textContent;
+      if (!t || t.length < 80) return;
+      if (
+        !t.includes('video_versions') &&
+        !t.includes('video_url') &&
+        !t.includes('playback_url') &&
+        !t.includes('video_resources')
+      ) {
+        return;
+      }
+      extractIgJson(t);
     });
   }
 
@@ -381,15 +571,155 @@
     const root = document.documentElement;
     if (!root) return;
     try {
+      scanFbScripts();
+    } catch {
+      /* ignore */
+    }
+    try {
+      scanIgScripts();
+    } catch {
+      /* ignore */
+    }
+    try {
       extractFbJson(root.innerHTML);
+    } catch {
+      /* ignore */
+    }
+    try {
+      extractIgJson(root.innerHTML);
     } catch {
       /* ignore */
     }
   }
 
+  // ------------------------------------ theo dõi video đang phát / lướt tới
+
+  function extractPostInfo(el) {
+    if (!el) return { title: null, pageUrl: null, poster: null };
+    const container =
+      el.closest('article') ||
+      el.closest('[role="dialog"]') ||
+      el.closest('[data-pagelet]') ||
+      el.closest('div[role="feed"] > div') ||
+      el.parentElement;
+
+    let title = null;
+    let pageUrl = null;
+    const poster = el.poster || null;
+
+    if (container) {
+      const textEl = container.querySelector('h1, h2, [dir="auto"], span[dir="auto"], p');
+      if (textEl && textEl.textContent.trim().length > 3) {
+        title = textEl.textContent.trim().slice(0, 100);
+      }
+      const linkEl = container.querySelector('a[href*="/reel/"], a[href*="/reels/"], a[href*="/p/"], a[href*="/videos/"]');
+      if (linkEl && linkEl.href) {
+        pageUrl = linkEl.href;
+      }
+    }
+    return { title, pageUrl, poster };
+  }
+
+  function markVideoActive(videoEl, trigger) {
+    if (!videoEl) return;
+    const src = videoEl.currentSrc || videoEl.src;
+    const info = extractPostInfo(videoEl);
+
+    // 1. Direct src (nếu là link mp4 hoàn chỉnh và không phải blob:)
+    if (src && /^https?:\/\//i.test(src) && !src.startsWith('blob:')) {
+      log.info(`🎯 [${trigger}] Bắt video direct src:`, src.slice(0, 80));
+      add(src, trigger, {
+        label: 'Đang phát',
+        isCurrent: true,
+        poster: info.poster,
+        title: info.title,
+        pageUrl: info.pageUrl || location.href,
+      });
+      return;
+    }
+
+    // 2. Với video blob: (Instagram & Facebook MSE), gửi yêu cầu tới inject.js để phân giải qua React Fiber / postMap
+    const href = info.pageUrl || location.href;
+    const igMatch = href.match(/\/(?:reel|reels|p)\/([A-Za-z0-9_-]+)/i);
+    const fbMatch = href.match(/\/(?:videos|reel)\/([0-9]+)/i) || href.match(/[?&]v=([0-9]+)/i);
+    const code = igMatch ? igMatch[1] : (fbMatch ? fbMatch[1] : null);
+
+    log.info(`🎯 [${trigger}] Video dùng blob:, yêu cầu MAIN world giải mã code [${code}]:`, href);
+    window.postMessage(
+      {
+        __videoGrabberAction: 'resolveVideo',
+        code: code,
+        title: info.title,
+        pageUrl: info.pageUrl || location.href,
+      },
+      '*'
+    );
+  }
+
+  // Bắt khi thẻ video bắt đầu chạy (cả khi người dùng bấm play hoặc Reels tự phát)
+  document.addEventListener(
+    'play',
+    (e) => {
+      if (e.target && e.target.tagName === 'VIDEO') {
+        markVideoActive(e.target, 'video-play');
+      }
+    },
+    true
+  );
+
+  document.addEventListener(
+    'playing',
+    (e) => {
+      if (e.target && e.target.tagName === 'VIDEO') {
+        markVideoActive(e.target, 'video-playing');
+      }
+    },
+    true
+  );
+
+  // Bắt khi người dùng click vào video hoặc bài viết chứa video
+  document.addEventListener(
+    'click',
+    (e) => {
+      const v =
+        e.target.tagName === 'VIDEO'
+          ? e.target
+          : e.target.querySelector('video') || e.target.closest('article')?.querySelector('video');
+      if (v) {
+        setTimeout(() => markVideoActive(v, 'video-click'), 200);
+      }
+    },
+    true
+  );
+
+  // Kiểm tra Reels đang nằm giữa màn hình và đang chạy khi cuộn trang
+  let scrollCheckTimer = null;
+  function checkViewportReels() {
+    const videos = document.querySelectorAll('video');
+    for (const v of videos) {
+      if (v.paused) continue;
+      const rect = v.getBoundingClientRect();
+      const visibleHeight = Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0);
+      const visibleWidth = Math.min(rect.right, window.innerWidth) - Math.max(rect.left, 0);
+      if (visibleHeight > 150 && visibleWidth > 150) {
+        markVideoActive(v, 'reels-active');
+        break;
+      }
+    }
+  }
+
+  window.addEventListener(
+    'scroll',
+    () => {
+      clearTimeout(scrollCheckTimer);
+      scrollCheckTimer = setTimeout(checkViewportReels, 350);
+    },
+    { passive: true }
+  );
+
   // --------------------------------------------------------------- vòng lặp
 
-  /** Mỗi nguồn bọc try/catch riêng: một nguồn lỗi không được giết các nguồn khác. */
+  /** Quét ứng viên FB private từ script; trạng thái đang xem được xác định riêng. */
   function scanAll() {
     try {
       scanDom();
@@ -397,14 +727,16 @@
       /* ignore */
     }
     try {
-      scanPerf();
+      checkViewportReels();
     } catch {
       /* ignore */
     }
-    try {
-      scanFbScripts();
-    } catch {
-      /* ignore */
+    if (/(^|\.)(facebook\.com|fb\.com)$/i.test(location.hostname)) {
+      try {
+        scanFbScripts();
+      } catch {
+        /* ignore */
+      }
     }
   }
 
@@ -412,21 +744,18 @@
     scanAll();
     startPerfObserver();
 
-    // Quan sát `document` (luôn tồn tại), KHÔNG phải document.documentElement —
-    // ở document_start thẻ <html> có thể chưa được tạo và observe() sẽ throw,
-    // làm chết toàn bộ IIFE.
+    // Quan sát DOM thay đổi
     const mo = new MutationObserver(() => {
       clearTimeout(mo._t);
-      mo._t = setTimeout(scanAll, 800);
+      mo._t = setTimeout(scanAll, 1000);
     });
     mo.observe(document, { childList: true, subtree: true });
 
-    // Facebook là SPA: <script> mới xuất hiện khi bạn mở video.
-    const loop = setInterval(scanAll, 2000);
-    setTimeout(() => clearInterval(loop), 10 * 60 * 1000); // tự tắt sau 10 phút
+    // Vòng lặp kiểm tra video đang phát
+    const loop = setInterval(scanAll, 2500);
+    setTimeout(() => clearInterval(loop), 10 * 60 * 1000);
 
     document.addEventListener('visibilitychange', scanAll);
-    window.addEventListener('click', () => setTimeout(scanAll, 1200), true);
     window.addEventListener('pagehide', flush, true);
   }
 

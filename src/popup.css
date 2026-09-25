@@ -123,70 +123,176 @@ h1 {
 .list {
   flex: 1;
   margin: 0;
-  padding: 6px 8px;
+  padding: 8px 10px;
   overflow-y: auto;
   list-style: none;
 }
 
 .item {
-  padding: 8px 10px;
-  margin-bottom: 5px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 9px;
   background: var(--surface);
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.item-top {
+.item.active-now {
+  border-color: #3b82f6;
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, var(--surface) 100%);
+  box-shadow: 0 0 14px rgba(59, 130, 246, 0.25);
+}
+
+.item:hover {
+  border-color: rgba(74, 134, 255, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.item-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.platform-badge-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 3px;
-}
-
-.kind {
-  padding: 1px 6px;
-  border-radius: 4px;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
   background: var(--surface-2);
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
 }
 
-.kind.file {
-  background: rgba(52, 211, 153, 0.15);
-  color: var(--ok);
+.platform-badge-icon.instagram {
+  background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+  color: #fff;
 }
 
-.kind.yt-adaptive {
-  background: rgba(167, 139, 250, 0.15);
-  color: #a78bfa;
+.platform-badge-icon.facebook {
+  background: #1877f2;
+  color: #fff;
 }
 
-.host {
+.platform-badge-icon.youtube {
+  background: #ff0000;
+  color: #fff;
+}
+
+.platform-badge-icon.generic {
+  background: #2f6feb;
+  color: #fff;
+}
+
+.item-main {
   flex: 1;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
 }
 
-.src {
-  color: #5c6478;
-  font-size: 10px;
-}
-
-.url {
+.item-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.35;
+  margin-bottom: 4px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  margin-bottom: 6px;
-  color: #9aa4bd;
+  word-break: break-word;
+}
+
+.item-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.tag-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.tag-badge.platform {
+  background: rgba(74, 134, 255, 0.15);
+  color: var(--accent-hover);
+}
+
+.tag-badge.platform.instagram {
+  background: rgba(225, 48, 108, 0.15);
+  color: #f472b6;
+}
+
+.tag-badge.platform.facebook {
+  background: rgba(24, 119, 242, 0.15);
+  color: #60a5fa;
+}
+
+.tag-badge.quality {
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--ok);
+}
+
+.tag-badge.hot-now {
+  background: linear-gradient(135deg, #ef4444, #f97316);
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
+}
+
+.tag-badge.subtle {
+  background: var(--surface-2);
+  color: var(--muted);
+  text-transform: none;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-preview-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 8px;
+  padding: 4px 8px;
+  background: var(--surface-2);
+  border-radius: 5px;
   font-family: Consolas, monospace;
-  font-size: 10.5px;
-  word-break: break-all;
+  font-size: 11px;
+  color: #c9d1d9;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.item-preview-player {
+  margin-bottom: 8px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid var(--border);
+  display: none;
+}
+
+.item-preview-player.show {
+  display: block;
+}
+
+.item-preview-player video {
+  width: 100%;
+  max-height: 220px;
+  display: block;
+  object-fit: contain;
 }
 
 .row {
@@ -196,8 +302,28 @@ h1 {
 
 .row .btn {
   flex: 1;
-  padding: 4px 8px;
-  font-size: 11px;
+  padding: 6px 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.btn.preview-btn {
+  background: var(--surface-2);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.btn.preview-btn.active {
+  background: #374151;
+  color: #f87171;
+  border-color: #f87171;
+}
+
+.btn.copy-btn {
+  flex: 0 0 54px;
 }
 
 /* --------------------------------------------------------------- misc */
