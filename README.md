@@ -126,24 +126,40 @@ fb-video-grabber/
     └── popup.js
 ```
 
-## Debug
+## Công cụ Debug mạnh mẽ (Mới)
 
-Popup có mục **Chẩn đoán** — mở ra để biết ngay vấn đề nằm ở đâu:
+### 1. Nút Reload 1-Click ngay trong Popup
+Không cần phải mở tab `chrome://extensions` để reload extension thủ công:
+- Mở popup extension → mở rộng **🛠️ Chẩn đoán & Debug** → bấm **[🔄 Reload Ext & Tab]**.
+- Extension sẽ tự nạp lại mã nguồn mới nhất và tự F5 tab web đang mở.
 
-| Chẩn đoán hiện | Nghĩa là |
-|---|---|
-| `✗ CONTENT SCRIPT KHÔNG PHẢN HỒI` | Script chưa inject → reload extension rồi F5 lại trang |
-| `Observer: ✗ KHÔNG TẠO ĐƯỢC` | Trình duyệt không hỗ trợ `PerformanceObserver` |
-| `inject.js: ✗ MAIN world chưa chạy` | Chrome quá cũ (cần ≥ 111) |
-| `Content script sống` + `0 URL` | Đúng, nhưng chưa bấm play video |
-| `bị loại` tăng cao | Regex lọc quá chặt — báo lại để nới |
+### 2. Live Logs & Đèn tín hiệu trong Popup
+- **Đèn tín hiệu:** Kiểm tra tức thì trạng thái của Content Script và Inject Script (`✓ OK` hoặc `✗ Chưa chạy`).
+- **Live Logs:** Xem trực tiếp 25 sự kiện gần nhất (link nào vừa được **[BẮT]**, link nào bị **[LOẠI]** kèm lý do cụ thể như: *DASH segment, host scontent ảnh, manifest...*).
+- **[📋 Copy Log]:** 1-click copy toàn bộ thông số chẩn đoán và danh sách URL vào clipboard để báo lỗi hoặc kiểm tra.
 
-| Triệu chứng | Nguyên nhân |
-|---|---|
-| Danh sách trống | Chưa bấm play, hoặc content script chưa inject → reload trang |
-| Tải xong file rỗng | URL hết hạn → Quét sâu lại |
-| `403 Forbidden` | Thiếu Referer hoặc URL hết hạn |
-| Không thấy video group private | Chưa đăng nhập Facebook, hoặc chưa bấm vào video |
+### 3. Log Console có màu sắc riêng biệt (F12)
+Mở Console (F12) trên trang web, logs được gán nhãn và màu sắc rõ ràng (không bị ẩn trong verbose):
+- `[VG:Inject]` (Màu tím): Bắt đầu hook fetch, XHR, DOM gán src, bắt player response YouTube.
+- `[VG:Content]` (Màu xanh lá): Gom luồng, lọc URL, phân loại format, gửi lên Background.
+- `[VG:Background]` (Màu xanh dương): Lưu trữ session, điều khiển tải file download.
 
-Log của content script: DevTools của trang → Console, tìm `[VideoGrabber]`.
-Log service worker: `chrome://extensions` → **Service worker**.
+### 4. Lệnh nhanh trực tiếp trong Console (`window.__VG__`)
+Trên bất kỳ trang web nào, mở F12 Console và gõ:
+- `__VG__.status()`: Xem bảng tổng kết trạng thái (Observer, bộ đếm các nguồn, số link bị loại).
+- `__VG__.items`: Lấy mảng toàn bộ video đã bắt được.
+- `__VG__.logs`: Xem lịch sử log sự kiện chi tiết gần nhất.
+- `__VG__.scan()`: Ép extension quét lại toàn bộ trang ngay lập tức.
+- `__VG__.test("https://...")`: Kiểm tra nhanh xem 1 URL bất kỳ có hợp lệ không, bị reject vì sao, hoặc phân loại là gì.
+
+---
+
+## Bảng chẩn đoán lỗi thường gặp
+
+| Chẩn đoán hiện | Nghĩa là | Cách khắc phục |
+|---|---|---|
+| `✗ CONTENT SCRIPT KHÔNG PHẢN HỒI` | Script chưa inject vào trang | Bấm **[🔄 Reload Ext & Tab]** |
+| `Observer: ✗ KHÔNG TẠO ĐƯỢC` | Trình duyệt không hỗ trợ Resource Timing | Nâng cấp trình duyệt Chromium |
+| `inject.js: ✗ MAIN world chưa chạy` | MAIN world script bị chặn hoặc chưa nạp | Bấm Reload Ext & Tab |
+| `Content script sống` + `0 URL` | Script hoạt động tốt nhưng chưa thấy dữ liệu | Bấm **Play** video để trình duyệt tải luồng |
+| `bị loại` tăng cao | Các request là segment (.m4s, .ts) hoặc ảnh | Xem chi tiết trong mục Live Logs |

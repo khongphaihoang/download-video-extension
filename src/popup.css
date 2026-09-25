@@ -297,6 +297,131 @@ footer {
   user-select: none;
 }
 
+.diag-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.diag-badge-status {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.diag-badge-status.ok {
+  color: var(--ok);
+  background: rgba(52, 211, 153, 0.15);
+}
+.diag-badge-status.err {
+  color: var(--err);
+  background: rgba(248, 113, 113, 0.15);
+}
+
+.diag-toolbar {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0 6px;
+}
+
+.diag-btn {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.diag-badges-grid {
+  display: flex;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.diag-badge-item {
+  flex: 1;
+  padding: 4px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.diag-badge-item b.ok {
+  color: var(--ok);
+}
+.diag-badge-item b.err {
+  color: var(--err);
+}
+
+.diag-logs-wrap {
+  margin-top: 8px;
+}
+
+.diag-logs-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.diag-logs-list {
+  max-height: 140px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px;
+  font-size: 10px;
+  font-family: Consolas, monospace;
+}
+
+.diag-log-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.diag-log-row:last-child {
+  border-bottom: none;
+}
+
+.diag-log-time {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.diag-log-tag {
+  border-radius: 2px;
+  padding: 1px 4px;
+  font-weight: 600;
+  flex-shrink: 0;
+  font-size: 9.5px;
+}
+
+.diag-log-tag.accept {
+  background: rgba(52, 211, 153, 0.2);
+  color: var(--ok);
+}
+
+.diag-log-tag.reject {
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--err);
+}
+
+.diag-log-tag.system {
+  background: rgba(74, 134, 255, 0.15);
+  color: var(--accent);
+}
+
+.diag-log-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  color: #cad1e0;
+}
+
 .diag summary:hover {
   color: var(--text);
 }

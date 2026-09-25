@@ -8,6 +8,33 @@
  *   - Thực hiện tải file qua chrome.downloads (tự gắn cookie của domain).
  */
 
+// Logger tiện ích cho background script
+const log = {
+  info: (msg, ...args) =>
+    console.log(
+      `%c[VG:Background]%c ${msg}`,
+      'background:#2563eb;color:#fff;padding:2px 6px;border-radius:3px;font-weight:600;',
+      'color:inherit;',
+      ...args
+    ),
+  warn: (msg, ...args) =>
+    console.warn(
+      `%c[VG:Background]%c ${msg}`,
+      'background:#d97706;color:#fff;padding:2px 6px;border-radius:3px;font-weight:600;',
+      'color:inherit;',
+      ...args
+    ),
+  err: (msg, ...args) =>
+    console.error(
+      `%c[VG:Background]%c ${msg}`,
+      'background:#dc2626;color:#fff;padding:2px 6px;border-radius:3px;font-weight:600;',
+      'color:inherit;',
+      ...args
+    ),
+};
+
+log.info('Service Worker đã sẵn sàng');
+
 const PREFIX = 'tab:';
 
 const keyFor = (tabId) => PREFIX + tabId;
@@ -33,7 +60,10 @@ async function addItems(tabId, incoming) {
     current.push(item);
     changed = true;
   }
-  if (changed) await writeItems(tabId, current);
+  if (changed) {
+    await writeItems(tabId, current);
+    log.info(`[Tab ${tabId}] Đã lưu ${incoming.length} link mới. Tổng: ${current.length}`);
+  }
   return current.length;
 }
 
@@ -75,16 +105,21 @@ function filenameFor(url, index, ytMeta) {
 async function downloadOne(item, index, total) {
   const url = typeof item === 'string' ? item : item.url;
   const ytMeta = (item && item.ytMeta) || null;
+  const filename = filenameFor(url, total > 1 ? index : null, ytMeta);
   try {
+    log.info(`Đang tải (${index + 1}/${total}): ${filename}`, url);
     const id = await chrome.downloads.download({
       url,
-      filename: filenameFor(url, total > 1 ? index : null, ytMeta),
+      filename,
       conflictAction: 'uniquify',
       saveAs: false,
     });
+    log.info(`Bắt đầu download ID: ${id}`);
     return { ok: true, id, url };
   } catch (err) {
-    return { ok: false, url, error: String((err && err.message) || err) };
+    const errorMsg = String((err && err.message) || err);
+    log.err(`Tải thất bại (${filename}): ${errorMsg}`, url);
+    return { ok: false, url, error: errorMsg };
   }
 }
 
@@ -110,6 +145,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === 'popup:clear') {
+    log.info(`Xoá danh sách tab ${msg.tabId}`);
     chrome.storage.session.remove(keyFor(msg.tabId)).then(() => {
       updateBadge(msg.tabId, 0);
       sendResponse({ ok: true });
@@ -118,6 +154,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === 'popup:rescan') {
+    log.info(`Quét sâu tab ${msg.tabId}`);
     chrome.tabs
       .sendMessage(msg.tabId, { type: 'content:rescan' })
       .then((r) => sendResponse({ ok: true, ...r }))
@@ -127,9 +164,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.type === 'popup:download') {
     const list = msg.items || [];
+    log.info(`Yêu cầu tải ${list.length} file`);
     Promise.all(list.map((it, i) => downloadOne(it, i, list.length))).then((results) =>
       sendResponse({ ok: true, results })
     );
+    return true;
+  }
+
+  // Debug: Nạp lại Extension và tải lại tab hiện tại
+  if (msg.type === 'debug:reload') {
+    log.info('🔄 Nhận lệnh nạp lại Extension & Tab:', msg.tabId);
+    if (msg.tabId) {
+      chrome.tabs.reload(msg.tabId).catch(() => {});
+    }
+    setTimeout(() => {
+      chrome.runtime.reload();
+    }, 150);
+    sendResponse({ ok: true });
     return true;
   }
 

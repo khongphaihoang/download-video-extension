@@ -19,6 +19,12 @@ const el = {
   downloadAll: $('#downloadAll'),
   diag: $('#diag'),
   ytNotice: $('#ytNotice'),
+  connStatus: $('#connStatus'),
+  statContentVal: $('#statContentVal'),
+  statInjectVal: $('#statInjectVal'),
+  btnReloadExt: $('#btnReloadExt'),
+  btnCopyDiag: $('#btnCopyDiag'),
+  diagLogs: $('#diagLogs'),
 };
 
 let tabId = null;
@@ -63,13 +69,43 @@ async function runDiag() {
   }
 
   if (!res || !res.ok) {
+    if (el.connStatus) {
+      el.connStatus.textContent = 'Mất kết nối';
+      el.connStatus.className = 'diag-badge-status err';
+    }
+    if (el.statContentVal) {
+      el.statContentVal.textContent = '✗ Chưa chạy';
+      el.statContentVal.className = 'err';
+    }
+    if (el.statInjectVal) {
+      el.statInjectVal.textContent = '✗ Chưa rõ';
+      el.statInjectVal.className = 'err';
+    }
+
     lines.push('');
     lines.push('✗ CONTENT SCRIPT KHÔNG PHẢN HỒI');
     lines.push('  Nghĩa là script chưa được inject vào trang.');
-    lines.push('  1. Vào chrome://extensions → bấm Reload trên extension');
+    lines.push('  1. Bấm nút [🔄 Reload Ext & Tab] bên trên');
     lines.push('  2. F5 lại trang web');
-    lines.push('  3. Trang chrome:// hoặc Web Store thì không inject được — thử trang khác');
+    lines.push('  3. Trang chrome:// hoặc Web Store thì trình duyệt cấm tiện ích chạy.');
+
+    if (el.diagLogs) {
+      el.diagLogs.innerHTML = '<div style="color:var(--muted);padding:4px;">Chưa nhận được log từ trang.</div>';
+    }
   } else {
+    if (el.connStatus) {
+      el.connStatus.textContent = 'Hoạt động';
+      el.connStatus.className = 'diag-badge-status ok';
+    }
+    if (el.statContentVal) {
+      el.statContentVal.textContent = '✓ OK';
+      el.statContentVal.className = 'ok';
+    }
+    if (el.statInjectVal) {
+      el.statInjectVal.textContent = res.hasInject ? '✓ OK' : '✗ Chưa chạy';
+      el.statInjectVal.className = res.hasInject ? 'ok' : 'err';
+    }
+
     const s = res.stats || {};
     lines.push('');
     lines.push(`✓ Content script sống (top frame: ${res.isTop})`);
@@ -89,7 +125,42 @@ async function runDiag() {
       lines.push('');
       lines.push('→ Content script chạy nhưng CHƯA thấy URL nào.');
       lines.push('  Phải bấm PLAY video, extension mới thấy luồng dữ liệu.');
-      lines.push('  Kiểm tra Console (F12) xem có dòng [VideoGrabber] không.');
+      lines.push('  Kiểm tra Console (F12) xem log [VG:Content] hoặc gõ __VG__.status()');
+    }
+
+    // Hiển thị danh sách Live Logs
+    if (el.diagLogs) {
+      const logs = res.logs || [];
+      if (!logs.length) {
+        el.diagLogs.innerHTML = '<div style="color:var(--muted);padding:4px;">Chưa có sự kiện nào. Hãy bấm Play video!</div>';
+      } else {
+        el.diagLogs.innerHTML = '';
+        const frag = document.createDocumentFragment();
+        // Hiển thị mới nhất ở trên
+        for (let i = logs.length - 1; i >= 0; i--) {
+          const l = logs[i];
+          const row = document.createElement('div');
+          row.className = 'diag-log-row';
+
+          const time = document.createElement('span');
+          time.className = 'diag-log-time';
+          time.textContent = l.time;
+
+          const tag = document.createElement('span');
+          tag.className = 'diag-log-tag ' + (l.type || '');
+          tag.textContent = l.type === 'accept' ? 'BẮT' : l.type === 'reject' ? 'LOẠI' : 'HỆ THỐNG';
+
+          const text = document.createElement('span');
+          text.className = 'diag-log-text';
+          const reasonText = l.detail && l.detail.reason ? ` [${l.detail.reason}]` : '';
+          text.textContent = `[${l.source}] ${l.text}${reasonText}`;
+          text.title = `${l.text}${reasonText}`;
+
+          row.append(time, tag, text);
+          frag.appendChild(row);
+        }
+        el.diagLogs.appendChild(frag);
+      }
     }
   }
 
@@ -280,5 +351,35 @@ el.filters.addEventListener('click', (e) => {
   el.filters.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c === chip));
   render();
 });
+
+if (el.btnReloadExt) {
+  el.btnReloadExt.addEventListener('click', async () => {
+    el.btnReloadExt.disabled = true;
+    el.btnReloadExt.textContent = 'Đang tải lại…';
+    setStatus('Đang nạp lại Extension & Tab…', 'ok');
+    try {
+      await chrome.runtime.sendMessage({ type: 'debug:reload', tabId });
+    } catch {
+      /* ignore */
+    }
+    setTimeout(() => window.close(), 300);
+  });
+}
+
+if (el.btnCopyDiag) {
+  el.btnCopyDiag.addEventListener('click', async () => {
+    const text = [
+      '=== VIDEO GRABBER DIAGNOSTIC REPORT ===',
+      el.diag.textContent,
+      '',
+      `=== DANH SÁCH URL ĐÃ LƯU (${allItems.length}) ===`,
+      JSON.stringify(allItems, null, 2),
+    ].join('\n');
+    await navigator.clipboard.writeText(text);
+    const oldText = el.btnCopyDiag.textContent;
+    el.btnCopyDiag.textContent = '✓ Đã copy!';
+    setTimeout(() => (el.btnCopyDiag.textContent = oldText), 1500);
+  });
+}
 
 load();

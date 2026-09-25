@@ -16,6 +16,32 @@
   if (window.__videoGrabberInjected) return;
   window.__videoGrabberInjected = true;
 
+  const log = {
+    info: (msg, ...args) =>
+      console.log(
+        `%c[VG:Inject]%c ${msg}`,
+        'background:#9333ea;color:#fff;padding:2px 6px;border-radius:3px;font-weight:600;',
+        'color:inherit;',
+        ...args
+      ),
+    warn: (msg, ...args) =>
+      console.warn(
+        `%c[VG:Inject]%c ${msg}`,
+        'background:#d97706;color:#fff;padding:2px 6px;border-radius:3px;font-weight:600;',
+        'color:inherit;',
+        ...args
+      ),
+  };
+
+  log.info('Đã nạp vào MAIN world thành công trên trang:', location.hostname);
+
+  // Expose global debug object in MAIN world (DevTools console)
+  window.__VG_INJECT__ = {
+    loadedAt: new Date().toISOString(),
+    host: location.hostname,
+    active: true,
+  };
+
   // Thông báo cho content.js (ISOLATED world) biết inject.js đã chạy.
   // content.js không thể đọc window.__videoGrabberInjected vì khác world.
   window.postMessage({ __videoGrabber: true, url: '', via: '__ping' }, '*');
@@ -49,6 +75,7 @@
   function report(url, via) {
     try {
       if (!isCandidate(url)) return;
+      log.info(`🎯 [${via}] Bắt được candidate URL:`, url.slice(0, 90));
       window.postMessage({ __videoGrabber: true, url: String(url), via }, '*');
     } catch {
       /* ignore */
@@ -80,6 +107,7 @@
 
     // Progressive formats — video+audio kết hợp, TẢI TRỰC TIẾP ĐƯỢC
     const formats = sd.formats || [];
+    log.info(`YouTube: phát hiện ${formats.length} progressive format (tải trực tiếp) & ${(sd.adaptiveFormats || []).length} adaptive format`);
     for (const fmt of formats) {
       if (!fmt.url) continue; // bỏ qua signatureCipher
       reportYt(fmt.url, 'yt-progressive', {
@@ -166,6 +194,7 @@
       while ((m = re.exec(text)) !== null) {
         const url = unescapeFbJson(m[1]);
         if (/^https?:\/\//i.test(url)) {
+          log.info(`🎯 [fb-response] Tìm thấy key "${key}":`, url.slice(0, 90));
           report(url, 'fb-response');
         }
       }

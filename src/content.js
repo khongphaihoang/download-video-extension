@@ -54,6 +54,39 @@
     'progressive_url',
   ];
 
+  // Logger có màu cho content script
+  const log = {
+    info: (msg, ...args) =>
+      console.log(
+        `%c[VG:Content]%c ${msg}`,
+        'background:#16a34a;color:#fff;padding:2px 6px;border-radius:3px;font-weight:600;',
+        'color:inherit;',
+        ...args
+      ),
+    warn: (msg, ...args) =>
+      console.warn(
+        `%c[VG:Content]%c ${msg}`,
+        'background:#d97706;color:#fff;padding:2px 6px;border-radius:3px;font-weight:600;',
+        'color:inherit;',
+        ...args
+      ),
+    err: (msg, ...args) =>
+      console.error(
+        `%c[VG:Content]%c ${msg}`,
+        'background:#dc2626;color:#fff;padding:2px 6px;border-radius:3px;font-weight:600;',
+        'color:inherit;',
+        ...args
+      ),
+  };
+
+  /** Bộ nhớ lưu 50 sự kiện gần nhất (bắt URL / loại URL) để popup hiển thị */
+  const recentLogs = [];
+  function addLog(type, source, text, detail) {
+    const time = new Date().toLocaleTimeString();
+    recentLogs.push({ time, type, source, text: String(text || '').slice(0, 150), detail });
+    if (recentLogs.length > 50) recentLogs.shift();
+  }
+
   /** @type {Map<string, object>} url -> item */
   const items = new Map();
   const seenNodes = new WeakSet();
@@ -129,16 +162,23 @@
   function add(raw, source, extra) {
     const url = normalize(raw);
     if (!url) return false;
-    if (BAD_RE.test(url)) return false;
+    if (BAD_RE.test(url)) {
+      addLog('reject', source, url, { reason: 'Trùng BAD_RE (ảnh/style/script/segment/manifest)' });
+      return false;
+    }
 
     const host = hostOf(url);
     // scontent là host ảnh của Facebook — chặn, TRỪ khi URL có đuôi media rõ ràng.
-    if (/^scontent/i.test(host) && !FILE_RE.test(url)) return false;
+    if (/^scontent/i.test(host) && !FILE_RE.test(url)) {
+      addLog('reject', source, url, { reason: 'Host scontent (ảnh FB, không có đuôi file video)' });
+      return false;
+    }
 
     // YouTube: cho phép URL googlevideo.com NẾU đến từ YouTube parser của chúng ta.
     const isFromYtParser = typeof source === 'string' && source.startsWith('inject:yt-');
     if (YOUTUBE_HOST_RE.test(host) && !isFromYtParser) {
       stats.rejected++;
+      addLog('reject', source, url, { reason: 'googlevideo.com bỏ qua (chỉ nhận qua YT parser)' });
       return false;
     }
 
@@ -147,6 +187,7 @@
       || isFromYtParser;
     if (!looksMedia) {
       stats.rejected++;
+      addLog('reject', source, url, { reason: 'Không có đuôi video và không nằm trong Media Host list' });
       return false;
     }
 
@@ -166,10 +207,11 @@
     // CHỈ GIỮ LINK VIDEO HOÀN CHỈNH — loại bỏ segment, HLS manifest, DASH manifest
     if (kind !== 'file' && kind !== 'yt-adaptive') {
       stats.rejected++;
+      addLog('reject', source, url, { reason: `Là '${kind}' (segment/manifest), không phải video file hoàn chỉnh` });
       return false;
     }
 
-    items.set(url, {
+    const newItem = {
       url,
       host,
       kind,
@@ -181,7 +223,11 @@
       foundAt: Date.now(),
       // metadata YouTube (nếu có)
       ytMeta: (extra && extra.ytMeta) || null,
-    });
+    };
+
+    items.set(url, newItem);
+    log.info(`🎯 +[${source}] Thêm video [${kind}]: ${url.slice(0, 80)}`);
+    addLog('accept', source, url, { kind, label: newItem.label });
 
     scheduleFlush();
     return true;
@@ -230,6 +276,8 @@
     // Nhận ping từ inject.js — chỉ ghi nhận, không add URL rỗng
     if (d.via === '__ping') {
       injectAlive = true;
+      log.info('Đã kết nối với inject.js (MAIN world)');
+      addLog('system', 'inject', 'MAIN world script đã kết nối', {});
       return;
     }
 
@@ -239,7 +287,6 @@
     if (add(d.url, source, extra)) {
       const isYt = d.via && d.via.startsWith('yt-');
       bumpStat(isYt ? 'yt' : 'inject');
-      console.debug('[VideoGrabber] +inject/' + d.via, d.url);
     }
   });
 
@@ -385,11 +432,58 @@
 
   boot();
 
-  console.debug('[VideoGrabber] content ready', {
+  log.info('Content script đã sẵn sàng', {
     url: location.href,
     isTop: window.top === window,
     buffer: BUFFER_SIZE,
   });
+
+  // ---- Expose DevTools Global Helper ---------------------------------------
+  // Người dùng hoặc lập trình viên mở F12 gõ `__VG__` để kiểm tra trực tiếp
+  try {
+    window.__VG__ = window.__VIDEO_GRABBER__ = {
+      status: () => {
+        console.group('%c[VideoGrabber] Báo Cáo Trạng Thái', 'color:#16a34a;font-size:13px;font-weight:bold;');
+        console.log('URL hiện tại:', location.href);
+        console.log('Top Frame:', window.top === window);
+        console.log('Tổng video bắt được:', items.size);
+        console.log('Inject (MAIN world) sống:', injectAlive);
+        console.log('PerformanceObserver:', !!perfObserver);
+        console.table(stats);
+        console.groupEnd();
+        return '💡 Gõ __VG__.items để xem link, __VG__.logs để xem sự kiện, __VG__.scan() để quét lại ngay';
+      },
+      get items() {
+        return Array.from(items.values());
+      },
+      get logs() {
+        return recentLogs;
+      },
+      stats,
+      scan: () => {
+        scanDeep();
+        scanAll();
+        flush();
+        log.info(`Đã quét xong. Tổng video hiện có: ${items.size}`);
+        return Array.from(items.values());
+      },
+      test: (testUrl) => {
+        const norm = normalize(testUrl);
+        if (!norm) return { ok: false, reason: 'URL rỗng hoặc là blob:/data:' };
+        if (BAD_RE.test(norm)) return { ok: false, reason: 'Khớp BAD_RE (ảnh/css/js/segment/manifest)' };
+        const host = hostOf(norm);
+        if (/^scontent/i.test(host) && !FILE_RE.test(norm)) return { ok: false, reason: 'Host scontent (ảnh Facebook)' };
+        if (YOUTUBE_HOST_RE.test(host)) return { ok: false, reason: 'Host googlevideo.com chỉ nhận qua YouTube parser' };
+        const looksMedia = FILE_RE.test(norm) || MEDIA_HOST_RE.test(host);
+        if (!looksMedia) return { ok: false, reason: 'Không có đuôi file video và không nằm trong Media CDN list' };
+        const kind = classify(norm);
+        if (kind !== 'file' && kind !== 'yt-adaptive') return { ok: false, reason: `Phân loại là '${kind}', chỉ nhận 'file' hoặc 'yt-adaptive'` };
+        return { ok: true, normalizedUrl: norm, kind, host };
+      },
+    };
+  } catch {
+    /* ignore */
+  }
 
   // ------------------------------------------------------------- API nội bộ
 
@@ -406,6 +500,7 @@
         hasObserver: !!perfObserver,
         hasInject: injectAlive,
         stats: { ...stats },
+        logs: recentLogs.slice(-25), // gửi 25 sự kiện gần nhất cho popup
       });
       return true;
     }

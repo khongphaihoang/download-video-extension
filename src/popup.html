@@ -46,8 +46,27 @@
     </div>
 
     <details id="diagWrap" class="diag">
-      <summary>Chẩn đoán</summary>
+      <summary class="diag-summary">
+        <span>🛠️ Chẩn đoán & Debug</span>
+        <span id="connStatus" class="diag-badge-status">Kiểm tra…</span>
+      </summary>
+
+      <div class="diag-toolbar">
+        <button id="btnReloadExt" class="btn diag-btn" title="Nạp lại Extension và F5 trang hiện tại">🔄 Reload Ext & Tab</button>
+        <button id="btnCopyDiag" class="btn diag-btn" title="Copy toàn bộ thông tin chẩn đoán">📋 Copy Log</button>
+      </div>
+
+      <div class="diag-badges-grid">
+        <div id="statContent" class="diag-badge-item">Content: <b id="statContentVal">--</b></div>
+        <div id="statInject" class="diag-badge-item">Inject: <b id="statInjectVal">--</b></div>
+      </div>
+
       <pre id="diag">Đang kiểm tra…</pre>
+
+      <div id="diagLogsWrap" class="diag-logs-wrap">
+        <div class="diag-logs-title">Sự kiện gần nhất (Live Logs):</div>
+        <div id="diagLogs" class="diag-logs-list"></div>
+      </div>
     </details>
 
     <footer>
