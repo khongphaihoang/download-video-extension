@@ -22,17 +22,17 @@ export function isYouTubeUrl(url) {
   }
 }
 
-export async function probeYouTubeUrl(tabId, url, probeMediaUrlFn, log) {
-  if (!isYouTubeUrl(url)) return { shouldDownload: true };
+export async function probeDownload(tabId, url, ctx) {
+  if (!isYouTubeUrl(url)) return null;   // không phải việc của YouTube → để module khác xử lý
 
-  const probe = await probeMediaUrlFn(tabId, url);
+  const probe = await ctx.probeMediaUrl(tabId, url);
   if (probe && probe.ok === false) {
     const error =
       probe.status === 403
         ? 'HTTP 403 — YouTube từ chối link tải trực tiếp (n-sig/PO token). '
         + 'Bấm Play cho video chạy rồi Quét sâu lại để lấy link "live".'
         : `HTTP ${probe.status || '?'} — link bị từ chối.`;
-    if (log) log.err(`Link YouTube bị từ chối (${error})`, url);
+    if (ctx.log) ctx.log.err(`Link YouTube bị từ chối (${error})`, url);
     return { shouldDownload: false, error };
   }
 

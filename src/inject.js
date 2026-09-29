@@ -1,17 +1,29 @@
 /**
- * src/inject.js — Bộ điều phối chạy trong MAIN world của trang.
+ * src/inject.js — Core chạy trong MAIN world của trang.
  *
- * Nhiệm vụ:
- *   - Hook fetch, XHR, video src, video play trong MAIN world.
- *   - Điều phối các module social (fb, ig, ytb...) đăng ký trong window.__VG_INJECT_MODULES__.
+ * Nhiệm vụ (KHÔNG chứa logic riêng của platform nào):
+ *   - Hook fetch, XHR, video.src, video.play trong MAIN world.
+ *   - Gọi interface chung của các social module đăng ký trong
+ *     window.__VG_INJECT_MODULES__ (helper + default nằm ở src/social/base.js).
  *   - Chuyển tiếp candidate URL sang content script qua window.postMessage.
+ *
+ * Interface một social module (MAIN world):
+ *   name, order, matchPage(), matchUrl(url, info), matchApi(url),
+ *   onRequest(url, ctx), onResponse(body, ctx), onVideoPlay(videoEl, ctx),
+ *   resolve(code, pageUrl, title, ctx), isCurrentRequest(url, ctx), init(ctx).
  */
 
 (() => {
   'use strict';
 
-  if (window.__videoGrabberInjected) return;
+  if (window.__videoGrabberInjected) return;   // chống cài hook trùng lặp
   window.__videoGrabberInjected = true;
+
+  const base = window.__VG_SOCIAL_BASE__;
+  if (!base) {
+    console.warn('[VG:Inject] Thiếu src/social/base.js — kiểm tra manifest.json');
+    return;
+  }
 
   const log = {
     info: (msg, ...args) =>
@@ -41,98 +53,56 @@
   // Thông báo cho content.js (ISOLATED world) biết inject.js đã chạy
   window.postMessage({ __videoGrabber: true, url: '', via: '__ping' }, '*');
 
-  const MEDIA_EXT_RE = /\.(mp4|m4v|m4s|webm|mkv|mov|avi|flv|m3u8|mpd|ts|f4v)(\?|#|$)/i;
+  // Các module social đã đăng ký (manifest nạp module trước file này)
+  const socialModules = Object.values(window.__VG_INJECT_MODULES__ || {});
 
-  const MEDIA_HOST_RE =
-    /(^|\.)(video[^.]*\.fbcdn\.net|fbcdn\.net|cdninstagram\.com|googlevideo\.com|video\.twimg\.com|vimeocdn\.com|tiktokcdn\.com|tiktokcdn-us\.com|akamaized\.net|cloudfront\.net|mux\.com|bunnycdn\.com|streamable\.com|dailymotion\.com|viddler\.com|jwplayer\.com|brightcove\.net|kaltura\.com)$/i;
+  // Chỉ module thuộc platform của trang hiện tại mới được gọi.
+  // Nhờ vậy các hook nặng (clone response, React Fiber, quét DOM...) không chạy
+  // trên những website không liên quan.
+  const activeModules = socialModules
+    .filter((m) => {
+      try { return !!m.matchPage(); } catch { return false; }
+    })
+    .sort((a, b) => (a.order || 50) - (b.order || 50));
 
-  const BAD_EXT_RE = /\.(jpe?g|png|gif|webp|svg|css|js|mjs|woff2?|ttf|ico|map)(\?|#|$)/i;
+  const activeSet = new Set(activeModules);
 
-  // Lấy các module social đã đăng ký
-  const socialModules = window.__VG_INJECT_MODULES__ || {};
-
-  // Lưu trữ ánh xạ post -> video URL
-  const postMap = new Map();
-  const postKey = (platform, codeOrId) => `${platform}:${codeOrId}`;
-
-  function recordPostVideo(platform, codeOrId, url, extra) {
-    if (!codeOrId || typeof url !== 'string') return;
-    const cleanUrl = url.replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
-      .replace(/\\\//g, '/')
-      .replace(/\\\\/g, '\\');
-    if (!/^https?:\/\//i.test(cleanUrl)) return;
-    const key = postKey(platform, codeOrId);
-    const rank = (extra && extra.rank) || 0;
-    const previous = postMap.get(key);
-    if (previous && previous.rank > rank) return;
-    postMap.set(key, {
-      code: String(codeOrId),
-      url: cleanUrl,
-      rank,
-      quality: (extra && extra.quality) || 'HD',
-      title: (extra && extra.title) || null,
-    });
-    log.info(`🎯 [postMap] Đã lưu ánh xạ [${key}] ->`, cleanUrl.slice(0, 80));
-  }
-
-  // Duyệt cây JSON an toàn
-  function eachResponseObject(text, visit) {
-    const payload = text.trim().replace(/^for\s*\(;;\);?\s*/, '');
-    let roots;
-    try {
-      roots = [JSON.parse(payload)];
-    } catch {
-      roots = [];
-      for (const line of payload.split(/\r?\n/)) {
-        try { roots.push(JSON.parse(line.replace(/^for\s*\(;;\);?\s*/, ''))); }
-        catch { /* ignore */ }
-      }
-    }
-    const seen = new WeakSet();
-    const stack = roots;
-    while (stack.length) {
-      const node = stack.pop();
-      if (!node || typeof node !== 'object' || seen.has(node)) continue;
-      seen.add(node);
-      if (Array.isArray(node)) {
-        for (const value of node) stack.push(value);
-      } else {
-        visit(node);
-        for (const value of Object.values(node)) {
-          if (value && typeof value === 'object') stack.push(value);
-        }
-      }
-    }
-  }
-
+  /**
+   * Candidate có phải media không?
+   * Core chỉ tổng hợp phán quyết từ module (matchUrl) rồi áp heuristic chung.
+   */
   function isCandidate(url, via) {
     if (typeof url !== 'string' || url.length < 12) return false;
     if (!/^https?:\/\//i.test(url)) return false;
-    if (BAD_EXT_RE.test(url)) return false;
+    if (base.BAD_ASSET_RE.test(url)) return false;
 
+    let host = '';
     try {
-      const host = new URL(url).hostname;
-
-      // Kiểm tra qua module Instagram
-      const igCandidate = socialModules.ig && socialModules.ig.isCandidate(url, host, via);
-      const isIgVideo = igCandidate && igCandidate.isVideo;
-
-      // Kiểm tra qua module Facebook
-      const fbCandidate = socialModules.fb && socialModules.fb.isCandidate(url, host, via);
-      const isFbVideo = fbCandidate && fbCandidate.isVideo;
-      const isFbStreamSegment = fbCandidate && fbCandidate.isStreamSegment;
-
-      if (/^scontent/i.test(host) && !MEDIA_EXT_RE.test(url)
-        && !isIgVideo && !isFbVideo && !isFbStreamSegment) return false;
-
-      // googlevideo.com chỉ cho phép qua YouTube parser (via yt-*)
-      if (/(^|\.)googlevideo\.com$/i.test(host)) return false;
-
-      if (MEDIA_EXT_RE.test(url)) return true;
-      return MEDIA_HOST_RE.test(host);
+      host = new URL(url).hostname;
     } catch {
       return false;
     }
+
+    let isPlatformVideo = false;
+    let isStreamSegment = false;
+
+    // Mọi module đều có quyền VETO (vd googlevideo không đến từ YT parser);
+    // nhưng chỉ module của platform đang mở mới được "nhận diện" candidate.
+    for (const m of socialModules) {
+      let verdict = null;
+      try { verdict = m.matchUrl(url, { host, via }); } catch { verdict = null; }
+      if (!verdict) continue;
+      if (verdict.reject) return false;
+      if (!activeSet.has(m)) continue;
+      if (verdict.isVideo || verdict.allow) isPlatformVideo = true;
+      if (verdict.isStreamSegment) isStreamSegment = true;
+    }
+
+    if (/^scontent/i.test(host) && !base.MEDIA_EXT_RE.test(url)
+      && !isPlatformVideo && !isStreamSegment) return false;
+
+    if (base.MEDIA_EXT_RE.test(url)) return true;
+    return base.MEDIA_HOST_RE.test(host);
   }
 
   let lastActiveVideoTime = 0;
@@ -140,19 +110,30 @@
 
   function report(url, via, meta) {
     try {
-      // YouTube live capture
-      if (socialModules.ytb && typeof socialModules.ytb.onFetchRequest === 'function') {
-        socialModules.ytb.onFetchRequest(url, { log });
+      // Cho module quan sát request gốc (YouTube bắt link videoplayback ở đây).
+      // Hook này rẻ và tự kiểm tra URL, nên vẫn gọi cả khi module không active.
+      for (const m of socialModules) {
+        try { m.onRequest(url, moduleContext); } catch { /* ignore */ }
       }
 
       if (!isCandidate(url, via)) return;
 
-      if ((via === 'fetch' || via === 'xhr') && Date.now() - lastActiveVideoTime < 3500
-        && (!/(^|\.)(facebook\.com|fb\.com)$/i.test(location.hostname)
-          || /[?&](?:bytestart|byteend)=/i.test(url))) {
-        meta = meta || {};
-        meta.isCurrent = true;
-        meta.label = 'Đang phát';
+      if (via === 'fetch' || via === 'xhr') {
+        if (Date.now() - lastActiveVideoTime < 3500) {
+          // Module quyết định request này có phải media đang phát không
+          // (Facebook chỉ tính byte-range; platform khác mặc định có).
+          let verdict = null;
+          for (const m of activeModules) {
+            let v = null;
+            try { v = m.isCurrentRequest(url, moduleContext); } catch { v = null; }
+            if (v !== null && v !== undefined) { verdict = !!v; break; }
+          }
+          if (verdict !== false) {
+            meta = meta || {};
+            meta.isCurrent = true;
+            meta.label = 'Đang phát';
+          }
+        }
       }
 
       log.info(`🎯 [${via}] Bắt được candidate URL:`, url.slice(0, 90));
@@ -164,128 +145,84 @@
   const moduleContext = {
     log,
     report,
-    postMap,
-    postKey,
-    recordPostVideo,
-    eachResponseObject,
+    base,
+    activeModules,
   };
-
-  // Trích xuất video từ React Fiber
-  function extractVideoFromElement(videoEl) {
-    if (!videoEl) return null;
-    const directSrc = videoEl.currentSrc || videoEl.src;
-    if (directSrc && /^https?:\/\//i.test(directSrc) && !directSrc.startsWith('blob:')) {
-      return { url: directSrc };
-    }
-
-    try {
-      const keys = Object.keys(videoEl);
-      const fiberKey = keys.find((k) => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$'));
-      if (!fiberKey || !videoEl[fiberKey]) return null;
-
-      let fiber = videoEl[fiberKey];
-      let depth = 0;
-      while (fiber && depth < 35) {
-        depth++;
-        const p = fiber.memoizedProps;
-        if (p) {
-          // Thử trích xuất qua module Instagram
-          if (socialModules.ig && typeof socialModules.ig.extractFiberProps === 'function') {
-            const igRes = socialModules.ig.extractFiberProps(p);
-            if (igRes && igRes.url) return igRes;
-          }
-          // Thử trích xuất qua module Facebook
-          if (socialModules.fb && typeof socialModules.fb.extractFiberProps === 'function') {
-            const fbRes = socialModules.fb.extractFiberProps(p);
-            if (fbRes && fbRes.url) return fbRes;
-          }
-        }
-        fiber = fiber.return;
-      }
-    } catch { /* ignore */ }
-    return null;
-  }
 
   function handleActiveVideoPlay(videoEl) {
     if (!videoEl) return;
     lastActiveVideoTime = Date.now();
     lastActiveVideoEl = videoEl;
 
-    // 1. YouTube
-    if (socialModules.ytb && typeof socialModules.ytb.handleActivePlay === 'function') {
-      if (socialModules.ytb.handleActivePlay(location.href, moduleContext)) return;
-    }
-
-    // 2. React Fiber
-    const fromFiber = extractVideoFromElement(videoEl);
-    if (fromFiber && fromFiber.url) {
-      log.info('🎯 [ActivePlay] Trích xuất thành công từ React Fiber:', fromFiber.url.slice(0, 80));
-      report(fromFiber.url, 'react-fiber', {
-        isCurrent: true,
-        label: 'Đang phát',
-        title: fromFiber.title || null,
-        code: fromFiber.code || null,
-      });
+    // 1. <video> có src http thật (không phải blob:) → báo luôn.
+    //    via giữ nguyên tên 'react-fiber' để tương thích dữ liệu/khớp source cũ.
+    const directSrc = base.directMediaSrc(videoEl);
+    if (directSrc) {
+      report(directSrc, 'react-fiber', { isCurrent: true, label: 'Đang phát' });
       return;
     }
 
-    // 3. Tìm link bài viết từ DOM container hoặc URL
-    const container =
-      videoEl.closest('article, [role="dialog"], [data-pagelet], div[role="feed"] > div') ||
-      videoEl.parentElement;
-    const link = container
-      ? container.querySelector('a[href*="/reel/"], a[href*="/reels/"], a[href*="/p/"], a[href*="/videos/"]')
-      : null;
-    const href = (link && link.href) || location.href;
-
-    // 4. Instagram
-    if (socialModules.ig && typeof socialModules.ig.handleActivePlay === 'function') {
-      if (socialModules.ig.handleActivePlay(href, moduleContext)) return;
+    // 2. Giao cho từng platform tự xử lý (React Fiber, postMap, player state...).
+    //    Module trả true nghĩa là đã xử lý xong, không xét module tiếp theo.
+    for (const m of activeModules) {
+      try {
+        if (m.onVideoPlay(videoEl, moduleContext)) return;
+      } catch { /* ignore */ }
     }
+  }
 
-    // 5. Facebook
-    if (socialModules.fb && typeof socialModules.fb.handleActivePlay === 'function') {
-      if (socialModules.fb.handleActivePlay(href, moduleContext)) return;
+  // -------------------------------------------------- đọc response có kiểm soát
+  // Chỉ đọc body khi: đúng API endpoint của platform + content-type phù hợp +
+  // kích thước chấp nhận được (tránh clone/parse mọi response lớn).
+  const MAX_SCAN_CHARS = 4 * 1024 * 1024;
+  const SCANNABLE_TYPE_RE = /json|text|javascript/i;
+
+  function apiModulesFor(url) {
+    const matched = [];
+    for (const m of activeModules) {
+      let hit = false;
+      try { hit = !!m.matchApi(url); } catch { hit = false; }
+      if (hit) matched.push(m);
     }
+    return matched;
+  }
+
+  function scanResponseBody(modules, response) {
+    try {
+      const contentType = (response.headers.get('content-type') || '').toLowerCase();
+      if (contentType && !SCANNABLE_TYPE_RE.test(contentType)) return;
+
+      const length = Number(response.headers.get('content-length') || 0);
+      if (Number.isFinite(length) && length > MAX_SCAN_CHARS) return;
+
+      response.clone().text().then((body) => {
+        if (!body || body.length > MAX_SCAN_CHARS) return;
+        for (const m of modules) {
+          try { m.onResponse(body, moduleContext); } catch { /* ignore */ }
+        }
+      }).catch(() => { });
+    } catch { /* ignore */ }
   }
 
   // ------------------------------------------------------------ hook fetch
   const nativeFetch = window.fetch;
   if (typeof nativeFetch === 'function') {
-    window.fetch = function (input, init) {
+    window.fetch = function (input) {
+      let reqUrl = null;
       try {
-        let url = null;
-        if (typeof input === 'string') url = input;
-        else if (input && typeof input.url === 'string') url = input.url;
-        if (url) report(url, 'fetch');
+        if (typeof input === 'string') reqUrl = input;
+        else if (input && typeof input.url === 'string') reqUrl = input.url;
       } catch { /* ignore */ }
+
+      if (reqUrl) report(reqUrl, 'fetch');
 
       const promise = nativeFetch.apply(this, arguments);
 
       try {
-        let reqUrl = null;
-        if (typeof input === 'string') reqUrl = input;
-        else if (input && typeof input.url === 'string') reqUrl = input.url;
-
         if (reqUrl) {
-          const matchedModules = Object.values(socialModules).filter(
-            (m) => typeof m.isApiRequest === 'function' && m.isApiRequest(reqUrl)
-          );
-
+          const matchedModules = apiModulesFor(reqUrl);
           if (matchedModules.length > 0) {
-            promise.then((response) => {
-              try {
-                const cloned = response.clone();
-                cloned.text().then((body) => {
-                  for (const m of matchedModules) {
-                    if (typeof m.scanResponse === 'function') {
-                      try { m.scanResponse(body, moduleContext); }
-                      catch { /* ignore */ }
-                    }
-                  }
-                }).catch(() => { });
-              } catch { /* ignore */ }
-            }).catch(() => { });
+            promise.then((response) => scanResponseBody(matchedModules, response)).catch(() => { });
           }
         }
       } catch { /* ignore */ }
@@ -298,26 +235,26 @@
   const nativeOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function (method, url) {
     try {
-      if (url) report(String(url), 'xhr');
-      const urlStr = String(url);
-      this.__vgMatchedModules = Object.values(socialModules).filter(
-        (m) => typeof m.isApiRequest === 'function' && m.isApiRequest(urlStr)
-      );
+      if (url) {
+        const urlStr = String(url);
+        report(urlStr, 'xhr');
+        this.__vgMatchedModules = apiModulesFor(urlStr);
+      }
     } catch { /* ignore */ }
     return nativeOpen.apply(this, arguments);
   };
 
   const nativeSend = XMLHttpRequest.prototype.send;
   XMLHttpRequest.prototype.send = function () {
-    if (Array.isArray(this.__vgMatchedModules) && this.__vgMatchedModules.length > 0) {
-      const modules = this.__vgMatchedModules;
+    const modules = this.__vgMatchedModules;
+    if (Array.isArray(modules) && modules.length > 0) {
       this.addEventListener('load', function () {
         try {
           if (this.responseType === '' || this.responseType === 'text') {
-            for (const m of modules) {
-              if (typeof m.scanResponse === 'function') {
-                try { m.scanResponse(this.responseText, moduleContext); }
-                catch { /* ignore */ }
+            const body = this.responseText;
+            if (body && body.length <= MAX_SCAN_CHARS) {
+              for (const m of modules) {
+                try { m.onResponse(body, moduleContext); } catch { /* ignore */ }
               }
             }
           }
@@ -370,12 +307,12 @@
     const { code, title, pageUrl } = e.data;
 
     let resolved = false;
-    for (const m of Object.values(socialModules)) {
-      if (typeof m.resolveVideo === 'function') {
-        if (m.resolveVideo(code, pageUrl, title, moduleContext)) {
-          resolved = true;
-          break;
-        }
+    for (const m of activeModules) {
+      let ok = false;
+      try { ok = !!m.resolve(code, pageUrl, title, moduleContext); } catch { ok = false; }
+      if (ok) {
+        resolved = true;
+        break;
       }
     }
 
@@ -390,11 +327,8 @@
     }
   });
 
-  // Khởi tạo các module
-  for (const m of Object.values(socialModules)) {
-    if (typeof m.init === 'function') {
-      try { m.init(moduleContext); }
-      catch { /* ignore */ }
-    }
+  // Khởi tạo các module của platform đang mở
+  for (const m of activeModules) {
+    try { m.init(moduleContext); } catch { /* ignore */ }
   }
 })();

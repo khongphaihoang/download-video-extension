@@ -7,6 +7,12 @@
 
   window.__VG_INJECT_MODULES__ = window.__VG_INJECT_MODULES__ || {};
 
+  const base = window.__VG_SOCIAL_BASE__;
+  if (!base) {
+    console.warn('[VG:ytb] Thiếu src/social/base.js — kiểm tra manifest.json');
+    return;
+  }
+
   const YT_HOST_RE = /^(www\.|m\.)?youtube\.com$/i;
 
   function isYouTubePage() {
@@ -152,7 +158,8 @@
     }, 250);
   }
 
-  function captureLiveMediaUrl(raw, log) {
+  function captureLiveMediaUrl(raw, ctx) {
+    const log = ctx && ctx.log;
     if (typeof raw !== 'string' || raw.length < 20) return;
     if (raw.indexOf('googlevideo.com/videoplayback') === -1) return;
     let u;
@@ -164,6 +171,10 @@
     if (!/(^|\.)googlevideo\.com$/i.test(u.hostname)) return;
     if (!/\/videoplayback$/i.test(u.pathname)) return;
     if (u.searchParams.has('sabr')) return;
+
+    // Giữ nguyên URL gốc (browser thực sự gọi) và chỉ normalize bản sao dùng
+    // để tải — nhờ vậy debug 403 (n-sig/PO token) không bị mất thông tin.
+    const observedUrl = raw;
     for (const p of ['range', 'rn', 'rbuf', 'sq', 'alr']) u.searchParams.delete(p);
     const url = u.toString();
     if (liveYtSeen.has(url)) return;
@@ -186,6 +197,7 @@
       isAdaptive: via !== 'yt-progressive',
       isAudio,
       isLive: true,
+      observedUrl,
     };
     if (log) log.info('🎯 [yt-live] Bắt được link player đang dùng:', url.slice(0, 90));
     reportYt(url, via, meta);
@@ -195,7 +207,7 @@
       ? liveYtEntry.via === 'yt-progressive' ? 100000 + (liveYtEntry.meta.height || 0) : liveYtEntry.meta.isAudio ? -1 : liveYtEntry.meta.height || 0
       : -2;
     if (rank > oldRank) {
-      liveYtEntry = { url, via, meta, pageId: ytVideoIdFromUrl(location.href) };
+      liveYtEntry = { url, observedUrl, via, meta, pageId: ytVideoIdFromUrl(location.href) };
     }
   }
 
@@ -248,32 +260,49 @@
     reportYtCurrent();
   }
 
-  window.__VG_INJECT_MODULES__.ytb = {
+  window.__VG_INJECT_MODULES__.ytb = base.defineInjectedModule({
     name: 'ytb',
+    order: 10,
 
-    isPage: isYouTubePage,
+    matchPage: isYouTubePage,
 
-    isApiRequest(url) {
+    /**
+     * googlevideo chỉ được nhận khi đến từ YT parser (via `yt-*`).
+     * Hook mạng chung không được phép đẩy URL googlevideo vào danh sách.
+     */
+    matchUrl(url, { host }) {
+      if (!/(^|\.)googlevideo\.com$/i.test(host)) return null;
+      return { reject: 'googlevideo.com bỏ qua (chỉ nhận qua YT parser)' };
+    },
+
+    matchApi(url) {
       return url && /\/youtubei\/v1\/player/i.test(url);
     },
 
-    onFetchRequest(raw, ctx) {
-      captureLiveMediaUrl(raw, ctx.log);
+    onRequest(raw, ctx) {
+      captureLiveMediaUrl(raw, ctx);
     },
 
-    scanResponse(text, ctx) {
+    onResponse(text, ctx) {
       try {
         const json = JSON.parse(text);
         extractYouTubeFormats(json, ctx.log);
       } catch { /* ignore */ }
     },
 
-    handleActivePlay(href, ctx) {
-      if (isYouTubePage()) {
-        ensureYtCurrentReport();
-        return true;
-      }
-      return false;
+    onVideoPlay() {
+      if (!isYouTubePage()) return false;
+      ensureYtCurrentReport();
+      return true;
+    },
+
+    /**
+     * YouTube phát qua MSE (video.src là blob:) nên request googlevideo mới là
+     * nguồn đáng tin — trước đây core hard-code điều này cho mọi trang ≠ Facebook.
+     */
+    isCurrentRequest() {
+      if (!isYouTubePage()) return null;
+      return true;
     },
 
     init(ctx) {
@@ -298,5 +327,5 @@
     captureLiveMediaUrl,
     extractYouTubeFormats,
     reportYt,
-  };
+  });
 })();

@@ -2,7 +2,7 @@
  * src/social/fb/popup.js — Logic hiển thị và lọc dữ liệu Facebook trong Popup.
  */
 
-export function isFacebookTab(tabUrl) {
+export function matchTab(tabUrl) {
   try {
     return /(^|\.)(facebook\.com|fb\.com)$/i.test(new URL(tabUrl).hostname);
   } catch {
@@ -22,7 +22,13 @@ export function isFacebookItem(item) {
   }
 }
 
-export function filterAndDedupe(items, isFbTab) {
+/**
+ * Lọc & gộp trùng item Facebook: bỏ segment byte-range, gộp theo media path
+ * (nhiều URL cùng path chỉ giữ URL mới nhất).
+ */
+export function filterItems(items, ctx) {
+  const isFbTab = matchTab(ctx && ctx.tabUrl);
+
   // Lọc bỏ segment stream byte range trên Facebook
   let list = items.filter((item) => {
     if (!isFbTab || !isFacebookItem(item)) return true;

@@ -9,6 +9,18 @@ import * as fb from './social/fb/popup.js';
 import * as ig from './social/ig/popup.js';
 import * as ytb from './social/ytb/popup.js';
 
+/**
+ * Registry social module phía popup (thứ tự ưu tiên khi phân loại item).
+ * Thêm platform mới (vd TikTok) = tạo src/social/tiktok/popup.js,
+ * thêm 1 import + 1 dòng ở đây, khai báo file trong manifest.json.
+ *
+ * Interface (không bắt buộc đủ):
+ *   matchTab(tabUrl) -> bool, hasTabNotice,
+ *   filterItems(items, ctx), parseItemInfo(item, ctx),
+ *   formatFilename(item, info) | null, fallbackFilename(item, info) | null.
+ */
+const SOCIAL_MODULES = [ytb, ig, fb];
+
 const $ = (sel) => document.querySelector(sel);
 
 const el = {
@@ -65,6 +77,25 @@ async function runDiag() {
     res = null;
   }
 
+  // Tự phục hồi: extension vừa reload thì tab đang mở còn giữ script đã chết
+  // (chrome.runtime cũ) → inject lại rồi hỏi lại, khỏi phải F5 thủ công.
+  let reinjectResult = null;
+  if (!res || !res.ok) {
+    try {
+      reinjectResult = await chrome.runtime.sendMessage({ type: 'popup:reinject', tabId });
+    } catch {
+      reinjectResult = null;
+    }
+
+    if (reinjectResult) {
+      try {
+        res = await chrome.tabs.sendMessage(tabId, { type: 'content:ping' }, { frameId: 0 });
+      } catch {
+        res = null;
+      }
+    }
+  }
+
   if (!res || !res.ok) {
     if (el.connStatus) {
       el.connStatus.textContent = 'Mất kết nối';
@@ -86,6 +117,19 @@ async function runDiag() {
     lines.push('  2. F5 lại trang web');
     lines.push('  3. Trang chrome:// hoặc Web Store thì trình duyệt cấm tiện ích chạy.');
 
+    if (res && res.fatal) {
+      lines.push('');
+      lines.push('⚠️ ' + res.fatal);
+    } else if (reinjectResult) {
+      lines.push('');
+      lines.push('Đã thử inject lại script cho tab này:');
+      lines.push(`  MAIN world : ${reinjectResult.main}`);
+      lines.push(`  ISOLATED   : ${reinjectResult.isolated}`);
+      if (reinjectResult.main === 'ok' && reinjectResult.isolated === 'ok') {
+        lines.push('  → Vẫn không phản hồi: mở Console (F12) của trang, xem lỗi màu đỏ của [VG:Content].');
+      }
+    }
+
     if (el.diagLogs) {
       el.diagLogs.innerHTML = '<div style="color:var(--muted);padding:4px;">Chưa nhận được log từ trang.</div>';
     }
@@ -106,6 +150,8 @@ async function runDiag() {
     const s = res.stats || {};
     lines.push('');
     lines.push(`✓ Content script sống (top frame: ${res.isTop})`);
+    if (reinjectResult) lines.push('(đã tự inject lại script cho tab này)');
+    if (res.bootError) lines.push(`⚠️ boot() lỗi: ${String(res.bootError).split('\n')[0]}`);
     lines.push(`Observer   : ${res.hasObserver ? 'OK' : '✗ KHÔNG TẠO ĐƯỢC'}`);
     lines.push(`inject.js  : ${res.hasInject ? 'OK' : '✗ MAIN world chưa chạy'}`);
     lines.push(`Bắt ở frame: ${res.localCount} URL`);
@@ -149,7 +195,10 @@ async function runDiag() {
 
           const text = document.createElement('span');
           text.className = 'diag-log-text';
-          const reasonText = l.detail && l.detail.reason ? ` [${l.detail.reason}]` : '';
+          const d = l.detail || {};
+          const reasonText = d.reason
+            ? ` [${d.reason}${d.stage ? ' · ' + d.stage : ''}]`
+            : '';
           text.textContent = `[${l.source}] ${l.text}${reasonText}`;
           text.title = `${l.text}${reasonText}`;
 
@@ -175,15 +224,14 @@ async function load() {
   tabId = tab.id;
   currentTabUrl = tab.url || '';
 
-  // Phát hiện YouTube để hiển thị cảnh báo
-  const isYouTube = ytb.isYouTubeTab(currentTabUrl);
+  // Cảnh báo riêng của platform (hiện tại: YouTube) do module tự khai báo
+  const showTabNotice = SOCIAL_MODULES.some((m) => m.hasTabNotice && m.matchTab(currentTabUrl));
   if (el.ytNotice) {
-    el.ytNotice.classList.toggle('hidden', !isYouTube);
+    el.ytNotice.classList.toggle('hidden', !showTabNotice);
   }
 
   const key = 'tab:' + tabId;
   const store = await chrome.storage.session.get(key);
-  const isFbTab = fb.isFacebookTab(currentTabUrl);
 
   const rawList = (store[key] || []).sort((a, b) => {
     // 1. Video đang phát / vừa lướt tới LUÔN xếp đầu tiên
@@ -196,8 +244,13 @@ async function load() {
     return (KIND_ORDER[a.kind] ?? 9) - (KIND_ORDER[b.kind] ?? 9);
   });
 
-  // Lọc và khử trùng theo nền tảng
-  allItems = fb.filterAndDedupe(rawList, isFbTab);
+  // Platform tự lọc và gộp trùng item của mình
+  let list = rawList;
+  for (const m of SOCIAL_MODULES) {
+    if (typeof m.filterItems !== 'function') continue;
+    list = m.filterItems(list, { tabUrl: currentTabUrl });
+  }
+  allItems = list;
 
   render();
   await runDiag();
@@ -231,46 +284,40 @@ function render() {
 }
 
 function getFilename(item, info) {
-  if (item.ytMeta && item.ytMeta.title) {
-    const safeTitle = item.ytMeta.title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim();
-    const ytQuality = item.ytMeta.quality || '';
-    const ytExt = item.ytMeta.isAudio ? '.webm' : '.mp4';
-    return safeTitle + (ytQuality ? ' [' + ytQuality + ']' : '') + ytExt;
+  // 1. Tên file do platform đề xuất (YouTube: tiêu đề + chất lượng, Instagram: shortcode)
+  for (const m of SOCIAL_MODULES) {
+    if (typeof m.formatFilename !== 'function') continue;
+    const name = m.formatFilename(item, info);
+    if (name) return name;
   }
-  if (info.shortcode) {
-    return `instagram_${info.shortcode}.mp4`;
-  }
+
+  // 2. Tên file đọc được từ URL
   try {
     const u = new URL(item.url);
     const last = u.pathname.split('/').filter(Boolean).pop() || '';
     if (last && /\.[a-z0-9]{2,5}$/i.test(last)) return decodeURIComponent(last);
-    if (info.platform === 'instagram') return 'instagram_video.mp4';
   } catch { /* ignore */ }
+
+  // 3. Fallback cuối do platform quyết định
+  for (const m of SOCIAL_MODULES) {
+    if (typeof m.fallbackFilename !== 'function') continue;
+    const name = m.fallbackFilename(item, info);
+    if (name) return name;
+  }
+
   return 'video.mp4';
 }
 
 function parseItemInfo(item) {
-  const isFbTab = fb.isFacebookTab(currentTabUrl);
-
-  // 1. YouTube
-  const ytInfo = ytb.parseItemInfo(item);
-  if (ytInfo) {
-    return { ...ytInfo, filename: getFilename(item, ytInfo) };
+  // Platform tự nhận diện item của mình (ưu tiên: YouTube → Instagram → Facebook)
+  for (const m of SOCIAL_MODULES) {
+    if (typeof m.parseItemInfo !== 'function') continue;
+    const info = m.parseItemInfo(item, { tabUrl: currentTabUrl });
+    if (info) {
+      return { ...info, filename: getFilename(item, info) };
+    }
   }
 
-  // 2. Instagram
-  const igInfo = ig.parseItemInfo(item, isFbTab);
-  if (igInfo) {
-    return { ...igInfo, filename: getFilename(item, igInfo) };
-  }
-
-  // 3. Facebook
-  const fbInfo = fb.parseItemInfo(item);
-  if (fbInfo) {
-    return { ...fbInfo, filename: getFilename(item, fbInfo) };
-  }
-
-  // 4. Mặc định
   const defaultInfo = {
     platform: 'generic',
     platformName: 'Video File',

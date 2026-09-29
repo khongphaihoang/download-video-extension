@@ -7,6 +7,12 @@
 
   window.__VG_CONTENT_MODULES__ = window.__VG_CONTENT_MODULES__ || {};
 
+  const base = window.__VG_SOCIAL_BASE__;
+  if (!base) {
+    console.warn('[VG:ytb] Thiếu src/social/base.js — kiểm tra manifest.json');
+    return;
+  }
+
   const YOUTUBE_HOST_RE = /(^|\.)googlevideo\.com$/i;
 
   function isYouTubePage() {
@@ -17,31 +23,37 @@
     }
   }
 
-  window.__VG_CONTENT_MODULES__.ytb = {
+  window.__VG_CONTENT_MODULES__.ytb = base.defineContentModule({
     name: 'ytb',
+    order: 10,
 
-    isPage: isYouTubePage,
+    matchPage: isYouTubePage,
 
-    isCandidate(url, host, source) {
-      const isFromYtParser = typeof source === 'string' && source.startsWith('inject:yt-');
-      if (YOUTUBE_HOST_RE.test(host)) {
-        if (!isFromYtParser) {
-          return { allow: false, reason: 'googlevideo.com bỏ qua (chỉ nhận qua YT parser)' };
-        }
-        return { allow: true };
+    /**
+     * Quy tắc của YouTube (trước đây nằm rải trong core):
+     *   - googlevideo.com: chỉ nhận khi đến từ YT parser (via `yt-*`), nếu không thì veto.
+     *   - via `yt-progressive` → file hoàn chỉnh; các via `yt-*` khác → adaptive.
+     */
+    matchUrl(url, { host, source }) {
+      const isYtParser = typeof source === 'string' && source.startsWith('inject:yt-');
+
+      if (YOUTUBE_HOST_RE.test(host) && !isYtParser) {
+        return { reject: 'googlevideo.com bỏ qua (chỉ nhận qua YT parser)' };
       }
-      return null;
+      if (!isYtParser) return null;
+
+      return {
+        allow: true,
+        platform: 'youtube',
+        kind: source === 'inject:yt-progressive' ? 'file' : 'yt-adaptive',
+      };
     },
 
-    classify(url, source) {
-      const isFromYtParser = typeof source === 'string' && source.startsWith('inject:yt-');
-      if (isFromYtParser) {
-        return source === 'inject:yt-progressive' ? 'file' : 'yt-adaptive';
-      }
-      return null;
-    },
-
-    wrapMeta(via, extra) {
+    /**
+     * Bọc metadata phẳng từ inject thành extra.ytMeta — đây là thứ
+     * background.filenameFor() và popup.parseItemInfo() đọc.
+     */
+    decorateCandidate(via, extra) {
       if (extra && !extra.ytMeta && typeof via === 'string' && via.startsWith('yt-')) {
         extra.ytMeta = { ...extra };
       }
@@ -49,5 +61,5 @@
     },
 
     YOUTUBE_HOST_RE,
-  };
+  });
 })();

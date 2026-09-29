@@ -5,12 +5,80 @@
  *   - Gom item do content script gửi lên, lưu theo tabId trong storage.session.
  *   - Xoá dữ liệu khi tab điều hướng sang trang khác.
  *   - Thực hiện tải file qua chrome.downloads.
- *   - Sử dụng các module social (fb, ig, ytb) để xử lý logic đặc thù từng nền tảng.
+ *
+ * Background không biết chi tiết từng platform: mọi khác biệt nằm trong
+ * src/social/<platform>/background.js và được gọi qua registry bên dưới.
  */
 
 import * as fb from './social/fb/background.js';
 import * as ig from './social/ig/background.js';
 import * as ytb from './social/ytb/background.js';
+
+/**
+ * Registry social module phía background.
+ * Thêm platform mới (vd TikTok) = tạo src/social/tiktok/background.js,
+ * thêm 1 import + 1 dòng ở đây, khai báo file trong manifest.json.
+ *
+ * Interface (không bắt buộc đủ):
+ *   mediaKey(item) | null, ignoreItem(item) -> bool,
+ *   updateItem(existing, item, key) -> bool,
+ *   formatFilename(url, index, meta) | null,
+ *   probeDownload(tabId, url, ctx) | null.
+ */
+const SOCIAL_MODULES = [ytb, ig, fb];
+
+// Thứ tự file phải khớp manifest.json — dùng để inject lại khi tab cũ còn giữ
+// script đã chết (extension vừa được reload).
+const MAIN_WORLD_FILES = [
+  'src/social/base.js',
+  'src/social/fb/inject.js',
+  'src/social/ig/inject.js',
+  'src/social/ytb/inject.js',
+  'src/inject.js',
+];
+
+const ISOLATED_WORLD_FILES = [
+  'src/social/base.js',
+  'src/media/engine.js',
+  'src/social/fb/content.js',
+  'src/social/ig/content.js',
+  'src/social/ytb/content.js',
+  'src/content.js',
+];
+
+/**
+ * Inject lại content script vào tab đang mở.
+ *
+ * Cần thiết khi extension vừa được reload: tab đang mở vẫn giữ instance script cũ
+ * (chrome.runtime đã chết) nên popup thấy "content script không phản hồi" và trước
+ * đây bắt người dùng phải F5. Guard trong từng file (__videoGrabberContentLoaded /
+ * __videoGrabberInjected) đảm bảo frame đã có script thì không cài hook trùng.
+ */
+async function ensureContentScripts(tabId) {
+  const result = { main: 'ok', isolated: 'ok' };
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      files: MAIN_WORLD_FILES,
+      world: 'MAIN',
+    });
+  } catch (err) {
+    result.main = String((err && err.message) || err);
+  }
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      files: ISOLATED_WORLD_FILES,
+    });
+  } catch (err) {
+    result.isolated = String((err && err.message) || err);
+  }
+
+  log.info(`[Tab ${tabId}] Inject lại script:`, result);
+  return result;
+}
 
 // Logger tiện ích cho background script
 const log = {
@@ -54,7 +122,12 @@ async function writeItems(tabId, list) {
 }
 
 function getItemKey(item) {
-  return fb.facebookMediaKey(item);
+  for (const m of SOCIAL_MODULES) {
+    if (typeof m.mediaKey !== 'function') continue;
+    const key = m.mediaKey(item);
+    if (key) return key;
+  }
+  return item.url;
 }
 
 async function addItems(tabId, incoming) {
@@ -65,14 +138,16 @@ async function addItems(tabId, incoming) {
   for (const item of incoming) {
     if (!item || !item.url) continue;
 
-    // Lọc bỏ segment stream byte range của Facebook
-    if (fb.isIgnored(item)) continue;
+    // Platform tự loại item không phải file hoàn chỉnh (vd byte-range segment của Facebook)
+    if (SOCIAL_MODULES.some((m) => typeof m.ignoreItem === 'function' && m.ignoreItem(item))) continue;
 
     const key = getItemKey(item);
     const existing = byKey.get(key);
     if (existing) {
-      if (fb.updateExisting(existing, item, key)) {
-        changed = true;
+      for (const m of SOCIAL_MODULES) {
+        if (typeof m.updateItem === 'function' && m.updateItem(existing, item, key)) {
+          changed = true;
+        }
       }
       if (Array.isArray(item.sources)) {
         existing.sources = [...new Set([...(existing.sources || []), ...item.sources])];
@@ -111,19 +186,18 @@ function updateBadge(tabId, count) {
 
 // --------------------------------------------------------------- tải file
 
-/** Rút tên file an toàn từ URL. Sử dụng social modules tương ứng. */
+/** Rút tên file an toàn từ URL. Platform tự đề xuất trước, sau đó mới fallback. */
 function filenameFor(url, index, meta) {
   let base = null;
 
-  // 1. YouTube
-  base = ytb.formatFilename(url, index, meta);
-
-  // 2. Instagram
-  if (!base) {
-    base = ig.formatFilename(url, index, meta);
+  // 1. Tên file do platform quyết định (YouTube theo tiêu đề, Instagram theo shortcode...)
+  for (const m of SOCIAL_MODULES) {
+    if (typeof m.formatFilename !== 'function') continue;
+    base = m.formatFilename(url, index, meta);
+    if (base) break;
   }
 
-  // 3. Fallback URL thông thường
+  // 2. Fallback URL thông thường
   if (!base) {
     base = 'video';
     try {
@@ -154,10 +228,13 @@ async function downloadOne(item, index, total, tabId) {
   const meta = typeof item === 'object' ? item : null;
   const filename = filenameFor(url, total > 1 ? index : null, meta);
 
-  // Kiểm tra probe cho YouTube (tránh 403 lưu file .txt rác)
-  const probeCheck = await ytb.probeYouTubeUrl(tabId, url, probeMediaUrl, log);
-  if (!probeCheck.shouldDownload) {
-    return { ok: false, url, error: probeCheck.error };
+  // Platform có thể probe trước khi tải (YouTube trả 403 → tránh lưu file .txt rác)
+  for (const m of SOCIAL_MODULES) {
+    if (typeof m.probeDownload !== 'function') continue;
+    const probeCheck = await m.probeDownload(tabId, url, { probeMediaUrl, log });
+    if (probeCheck && !probeCheck.shouldDownload) {
+      return { ok: false, url, error: probeCheck.error };
+    }
   }
 
   try {
@@ -204,6 +281,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       updateBadge(msg.tabId, 0);
       sendResponse({ ok: true });
     });
+    return true;
+  }
+
+  if (msg.type === 'popup:reinject') {
+    const id = msg.tabId != null ? msg.tabId : tabId;
+    if (id == null) {
+      sendResponse({ ok: false, error: 'Không xác định được tab' });
+      return true;
+    }
+    ensureContentScripts(id).then(
+      (result) => sendResponse({ ok: true, ...result }),
+      (err) => sendResponse({ ok: false, error: String(err) })
+    );
     return true;
   }
 

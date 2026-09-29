@@ -143,17 +143,64 @@ download-video-extension/
 ├── rules/
 │   └── referer.json       # DNR: thêm Referer cho fbcdn.net, googlevideo, instagram
 └── src/
-    ├── social/            # Tách riêng source code theo từng mạng xã hội
+    ├── social/
+    │   ├── base.js        # Helper + interface chung cho mọi social module
     │   ├── fb/            # Facebook: inject, content, background, popup
-    │   ├── ig/            # Instagram: inject, content, background, popup
+    │   ├── ig/            # Instagram + Threads (dùng chung CDN/GraphQL của Meta)
     │   └── ytb/           # YouTube: inject, content, background, popup
-    ├── inject.js          # MAIN world orchestrator: hook fetch / XHR / video.src
-    ├── content.js         # isolated world orchestrator: gom nguồn, khử trùng lặp
+    ├── media/
+    │   └── engine.js      # Media Engine: phân loại file/hls/dash/segment, quyết định tải được hay không
+    ├── inject.js          # MAIN world core: hook fetch / XHR / video.src, điều phối module
+    ├── content.js         # isolated world core: gom nguồn, khử trùng lặp, gửi lên background
     ├── background.js      # Service worker: lưu trữ theo tab, gọi chrome.downloads
     ├── popup.html
     ├── popup.css
     └── popup.js
 ```
+
+## Kiến trúc plugin (từ v0.4.0)
+
+```
+Browser
+   ↓
+Core hooks        inject.js / content.js  — fetch, XHR, video, DOM, PerformanceObserver
+   ↓
+Social plugins    src/social/<platform>/  — biết luật riêng của từng mạng xã hội
+   ↓
+Media candidate   { url, observedUrl, kind, sources, ytMeta, ... }
+   ↓
+Media engine      src/media/engine.js     — file / hls / dash / segment
+   ↓
+Download engine   background.js           — chrome.downloads + probe
+```
+
+Core không chứa tên miền hay luật riêng của Facebook/Instagram/YouTube. Mỗi module
+đăng ký một interface chung và core chỉ gọi interface đó:
+
+| World | Method |
+|---|---|
+| MAIN (`inject.js`) | `matchPage`, `matchUrl`, `matchApi`, `onRequest`, `onResponse`, `onVideoPlay`, `resolve`, `isCurrentRequest`, `init` |
+| ISOLATED (`content.js`) | `matchPage`, `matchUrl`, `normalize`, `onCandidate`, `decorateCandidate`, `extractPostCode`, `scanScripts`, `scanRoot` |
+| Background / Popup | `mediaKey`, `ignoreItem`, `updateItem`, `probeDownload`, `formatFilename`, `matchTab`, `filterItems`, `parseItemInfo` |
+
+Mọi method đều tùy chọn — thiếu thì lấy default no-op từ `src/social/base.js`.
+
+**Instagram & Threads dùng chung một module** (`src/social/ig/`): cùng CDN (`cdninstagram.com` /
+`fbcdn.net`), cùng hạ tầng GraphQL, chỉ khác host và dạng URL bài viết (`/@user/post/CODE` so
+với `/reel/CODE`). Thêm Threads không cần module mới.
+
+**Thêm một platform mới (vd TikTok)** chỉ cần:
+
+1. Tạo `src/social/tiktok/{inject,content,background,popup}.js`
+2. Thêm 4 file đó vào `manifest.json`
+3. Thêm 1 import + 1 dòng vào registry trong `background.js` và `popup.js`
+
+Không phải sửa logic Facebook/Instagram/YouTube nào trong core.
+
+> **Lưu ý hiệu năng:** core vẫn nằm trên `<all_urls>` (để bắt MP4/WebM ở mọi trang),
+> nhưng module của platform chỉ được gọi khi `matchPage()` đúng. API response chỉ bị
+> clone/đọc khi URL khớp endpoint của platform (`matchApi`) **và** content-type là
+> JSON/text **và** dung lượng dưới 4MB.
 
 ## Công cụ Debug mạnh mẽ (Mới)
 
@@ -179,7 +226,8 @@ Trên bất kỳ trang web nào, mở F12 Console và gõ:
 - `__VG__.items`: Lấy mảng toàn bộ video đã bắt được.
 - `__VG__.logs`: Xem lịch sử log sự kiện chi tiết gần nhất.
 - `__VG__.scan()`: Ép extension quét lại toàn bộ trang ngay lập tức.
-- `__VG__.test("https://...")`: Kiểm tra nhanh xem 1 URL bất kỳ có hợp lệ không, bị reject vì sao, hoặc phân loại là gì.
+- `__VG__.test("https://...", "source-tuỳ-chọn")`: Soi một URL qua đúng luồng chấm điểm của extension (chuẩn hoá → veto/nhận diện của từng platform → scontent → media host → media engine) và trả về object `{ ok, kind, engine, platform, stage, reason, decisions }`. Không thêm gì vào danh sách.
+- `__VG__.idle`: `true` nghĩa là frame này chưa từng thấy media nên đang quét thưa (10s/lần thay vì 2.5s) — hữu ích khi debug các iframe không hiện trong danh sách.
 
 ---
 
@@ -187,7 +235,9 @@ Trên bất kỳ trang web nào, mở F12 Console và gõ:
 
 | Chẩn đoán hiện | Nghĩa là | Cách khắc phục |
 |---|---|---|
-| `✗ CONTENT SCRIPT KHÔNG PHẢN HỒI` | Script chưa inject vào trang | Bấm **[🔄 Reload Ext & Tab]** |
+| `✗ CONTENT SCRIPT KHÔNG PHẢN HỒI` | Script chưa chạy được trong tab. Thường gặp ngay sau khi **reload extension**: tab đang mở vẫn giữ instance script cũ đã chết (`chrome.runtime` bị invalidated) | Popup **tự inject lại** script khi bạn mở nó (xem dòng `Đã thử inject lại script…`). Nếu vẫn lỗi thì bấm **[🔄 Reload Ext & Tab]** hoặc F5 |
+| `⚠️ Thiếu src/social/base.js…` | `manifest.json` thiếu file hoặc sai thứ tự `js` | `base.js` phải nạp **trước** các module, `media/engine.js` nạp trước `content.js` |
+| `⚠️ boot() lỗi: …` | Content script chạy được nhưng lúc khởi động bị lỗi | Xem lỗi đầy đủ trong Console (F12) của trang |
 | `Observer: ✗ KHÔNG TẠO ĐƯỢC` | Trình duyệt không hỗ trợ Resource Timing | Nâng cấp trình duyệt Chromium |
 | `inject.js: ✗ MAIN world chưa chạy` | MAIN world script bị chặn hoặc chưa nạp | Bấm Reload Ext & Tab |
 | `Content script sống` + `0 URL` | Script hoạt động tốt nhưng chưa thấy dữ liệu | Bấm **Play** video để trình duyệt tải luồng |
