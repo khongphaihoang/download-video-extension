@@ -138,14 +138,18 @@ tải một mảnh không cho bạn video hoàn chỉnh.
 ## Cấu trúc
 
 ```
-fb-video-grabber/
-├── manifest.json          # MV3, service worker + content script
+download-video-extension/
+├── manifest.json          # MV3, service worker + content scripts
 ├── rules/
-│   └── referer.json       # DNR: thêm Referer cho fbcdn.net
+│   └── referer.json       # DNR: thêm Referer cho fbcdn.net, googlevideo, instagram
 └── src/
-    ├── inject.js          # MAIN world: hook fetch / XHR / video.src
-    ├── content.js         # isolated world: gom 4 nguồn, khử trùng lặp
-    ├── background.js      # lưu trữ theo tab, gọi chrome.downloads
+    ├── social/            # Tách riêng source code theo từng mạng xã hội
+    │   ├── fb/            # Facebook: inject, content, background, popup
+    │   ├── ig/            # Instagram: inject, content, background, popup
+    │   └── ytb/           # YouTube: inject, content, background, popup
+    ├── inject.js          # MAIN world orchestrator: hook fetch / XHR / video.src
+    ├── content.js         # isolated world orchestrator: gom nguồn, khử trùng lặp
+    ├── background.js      # Service worker: lưu trữ theo tab, gọi chrome.downloads
     ├── popup.html
     ├── popup.css
     └── popup.js

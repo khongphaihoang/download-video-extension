@@ -1,9 +1,13 @@
 /**
- * popup.js — UI.
+ * src/popup.js — UI.
  *
- * Đọc danh sách trực tiếp từ chrome.storage.session (nhanh, không cần đánh thức
- * service worker), còn các hành động thì gửi message cho background.
+ * Đọc danh sách trực tiếp từ chrome.storage.session,
+ * sử dụng các module social (fb, ig, ytb) để định dạng và hiển thị.
  */
+
+import * as fb from './social/fb/popup.js';
+import * as ig from './social/ig/popup.js';
+import * as ytb from './social/ytb/popup.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -28,13 +32,9 @@ const el = {
 };
 
 let tabId = null;
+let currentTabUrl = '';
 let allItems = [];
 let kindFilter = 'current';
-
-const KIND_LABEL = {
-  file: 'file',
-  'yt-adaptive': 'yt-adapt',
-};
 
 const KIND_ORDER = { file: 0, 'yt-adaptive': 1 };
 
@@ -44,8 +44,7 @@ async function getActiveTab() {
 }
 
 /**
- * Chẩn đoán — trả lời câu hỏi quan trọng nhất khi danh sách trống:
- * content script KHÔNG CHẠY, hay chạy nhưng KHÔNG THẤY gì?
+ * Chẩn đoán — trả lời câu hỏi: content script đã chạy chưa và bắt được những gì?
  */
 async function runDiag() {
   const lines = [];
@@ -53,9 +52,7 @@ async function runDiag() {
   let tab = null;
   try {
     tab = await chrome.tabs.get(tabId);
-  } catch {
-    /* ignore */
-  }
+  } catch { /* ignore */ }
 
   lines.push(`Manifest   : v${chrome.runtime.getManifest().version}`);
   lines.push(`Tab        : ${tab && tab.url ? tab.url.slice(0, 90) : '(không đọc được)'}`);
@@ -63,8 +60,6 @@ async function runDiag() {
 
   let res = null;
   try {
-    // Chỉ hỏi frame chính: YouTube có nhiều iframe, nếu hỏi cả tab thì câu trả lời
-    // đầu tiên có thể đến từ iframe (báo 0 URL) và chẩn đoán sẽ sai.
     res = await chrome.tabs.sendMessage(tabId, { type: 'content:ping' }, { frameId: 0 });
   } catch {
     res = null;
@@ -131,7 +126,7 @@ async function runDiag() {
       lines.push('  Kiểm tra Console (F12) xem log [VG:Content] hoặc gõ __VG__.status()');
     }
 
-    // Hiển thị danh sách Live Logs
+    // Hiển thị Live Logs
     if (el.diagLogs) {
       const logs = res.logs || [];
       if (!logs.length) {
@@ -139,7 +134,6 @@ async function runDiag() {
       } else {
         el.diagLogs.innerHTML = '';
         const frag = document.createDocumentFragment();
-        // Hiển thị mới nhất ở trên
         for (let i = logs.length - 1; i >= 0; i--) {
           const l = logs[i];
           const row = document.createElement('div');
@@ -179,31 +173,19 @@ async function load() {
   const tab = await getActiveTab();
   if (!tab) return;
   tabId = tab.id;
+  currentTabUrl = tab.url || '';
 
   // Phát hiện YouTube để hiển thị cảnh báo
-  const isYouTube = tab.url && /^https?:\/\/(www\.|m\.)?youtube\.com\//i.test(tab.url);
+  const isYouTube = ytb.isYouTubeTab(currentTabUrl);
   if (el.ytNotice) {
     el.ytNotice.classList.toggle('hidden', !isYouTube);
   }
 
   const key = 'tab:' + tabId;
   const store = await chrome.storage.session.get(key);
-  const facebookTab = (() => {
-    try { return /(^|\.)(facebook\.com|fb\.com)$/i.test(new URL(tab.url).hostname); }
-    catch { return false; }
-  })();
-  const isFacebookItem = (item) => {
-    try { return /(^|\.)(facebook\.com|fb\.com)$/i.test(new URL(item.pageUrl).hostname); }
-    catch { return false; }
-  };
-  allItems = (store[key] || []).filter((item) => {
-    if (!facebookTab || !isFacebookItem(item)) return true;
-    try {
-      const media = new URL(item.url);
-      return !/(^|\.)fbcdn\.net$/i.test(media.hostname)
-        || (!media.searchParams.has('bytestart') && !media.searchParams.has('byteend'));
-    } catch { return true; }
-  }).sort((a, b) => {
+  const isFbTab = fb.isFacebookTab(currentTabUrl);
+
+  const rawList = (store[key] || []).sort((a, b) => {
     // 1. Video đang phát / vừa lướt tới LUÔN xếp đầu tiên
     if (a.isCurrent && !b.isCurrent) return -1;
     if (!a.isCurrent && b.isCurrent) return 1;
@@ -213,28 +195,9 @@ async function load() {
     // 3. Kind order
     return (KIND_ORDER[a.kind] ?? 9) - (KIND_ORDER[b.kind] ?? 9);
   });
-  if (facebookTab) {
-    const byPath = new Map();
-    allItems = allItems.filter((item) => {
-      if (!isFacebookItem(item)) return true;
-      let media;
-      try { media = new URL(item.url); } catch { return true; }
-      if (!/(^|\.)fbcdn\.net$/i.test(media.hostname)) return true;
-      const key = media.pathname;
-      const existing = byPath.get(key);
-      if (existing) {
-        if ((item.foundAt || 0) > (existing.foundAt || 0)) {
-          existing.url = item.url;
-          existing.host = item.host;
-          existing.foundAt = item.foundAt;
-        }
-        existing.isCurrent = !!(existing.isCurrent || item.isCurrent);
-        return false;
-      }
-      byPath.set(key, item);
-      return true;
-    });
-  }
+
+  // Lọc và khử trùng theo nền tảng
+  allItems = fb.filterAndDedupe(rawList, isFbTab);
 
   render();
   await runDiag();
@@ -267,104 +230,54 @@ function render() {
   el.list.appendChild(frag);
 }
 
-function parseItemInfo(item) {
-  let platform = 'generic';
-  let platformName = 'Video File';
-  let title = item.pageTitle || 'Video';
-  let quality = 'MP4';
-  let shortcode = '';
-
-  const host = item.host || '';
-  const pageUrl = item.pageUrl || '';
-  const url = item.url || '';
-  const facebookPage = /(^|\.)(facebook\.com|fb\.com)$/i.test((() => {
-    try { return new URL(pageUrl).hostname; } catch { return ''; }
-  })());
-
-  // 1. YouTube
-  // Nhận diện theo cả host/kid để item cũ lỡ thiếu ytMeta vẫn hiển thị đúng.
-  if (
-    item.ytMeta ||
-    item.kind === 'yt-adaptive' ||
-    /(^|\.)googlevideo\.com$/i.test(host) ||
-    /(^|\.)youtube\.com$/i.test(host)
-  ) {
-    platform = 'youtube';
-    platformName = 'YouTube';
-    title = (item.ytMeta && item.ytMeta.title) || item.pageTitle || 'YouTube Video';
-    quality =
-      (item.ytMeta && item.ytMeta.quality) ||
-      (item.ytMeta && item.ytMeta.isAudio ? 'Audio' : item.kind === 'file' ? 'Progressive' : 'Adaptive');
-    // Link bắt từ chính request của player (n-sig đã hợp lệ) mới tải được thật.
-    if (item.ytMeta && item.ytMeta.isLive) quality += ' • live';
-  }
-  // 2. Instagram
-  else if (
-    host.includes('instagram') ||
-    pageUrl.includes('instagram.com') ||
-    (item.label && item.label.includes('Instagram')) ||
-    (!facebookPage && (url.includes('/o1/v/t16/') || url.includes('/v/t50.')))
-  ) {
-    platform = 'instagram';
-    platformName = 'Instagram';
-
-    const matchReel = pageUrl.match(/(?:reel|reels|p)\/([A-Za-z0-9_-]+)/i);
-    if (matchReel) {
-      shortcode = matchReel[1];
-    }
-
-    if (item.pageTitle) {
-      const igTitleMatch = item.pageTitle.match(/^(.+?)\s+on Instagram:\s*["“](.+?)["”]?$/i);
-      if (igTitleMatch) {
-        title = `${igTitleMatch[1]}: ${igTitleMatch[2]}`;
-      } else {
-        title = item.pageTitle.replace(/\s*•\s*Instagram.*$/i, '').trim();
-      }
-    } else if (shortcode) {
-      title = `Instagram Reel [${shortcode}]`;
-    } else {
-      title = 'Instagram Video';
-    }
-
-    quality = 'HD MP4';
-  }
-  // 3. Facebook
-  else if (host.includes('fbcdn') || host.includes('facebook') || pageUrl.includes('facebook.com')) {
-    platform = 'facebook';
-    platformName = 'Facebook';
-    if (item.label === 'browser_native_hd_url') quality = 'HD';
-    else if (item.label === 'browser_native_sd_url') quality = 'SD';
-    else quality = item.label || 'MP4';
-
-    if (item.pageTitle) {
-      title = item.pageTitle.replace(/\s*\|\s*Facebook.*$/i, '').trim();
-    } else {
-      title = 'Facebook Video';
-    }
-  }
-
-  // Tên file dự kiến — phải khớp filenameFor() trong background.js
-  let filename = 'video.mp4';
+function getFilename(item, info) {
   if (item.ytMeta && item.ytMeta.title) {
     const safeTitle = item.ytMeta.title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim();
     const ytQuality = item.ytMeta.quality || '';
     const ytExt = item.ytMeta.isAudio ? '.webm' : '.mp4';
-    filename = safeTitle + (ytQuality ? ' [' + ytQuality + ']' : '') + ytExt;
-  } else if (shortcode) {
-    filename = `instagram_${shortcode}.mp4`;
-  } else {
-    try {
-      const u = new URL(url);
-      const last = u.pathname.split('/').filter(Boolean).pop() || '';
-      if (last && /\.[a-z0-9]{2,5}$/i.test(last)) filename = decodeURIComponent(last);
-      else if (platform === 'instagram') filename = `instagram_video.mp4`;
-      else filename = 'video.mp4';
-    } catch {
-      /* ignore */
-    }
+    return safeTitle + (ytQuality ? ' [' + ytQuality + ']' : '') + ytExt;
+  }
+  if (info.shortcode) {
+    return `instagram_${info.shortcode}.mp4`;
+  }
+  try {
+    const u = new URL(item.url);
+    const last = u.pathname.split('/').filter(Boolean).pop() || '';
+    if (last && /\.[a-z0-9]{2,5}$/i.test(last)) return decodeURIComponent(last);
+    if (info.platform === 'instagram') return 'instagram_video.mp4';
+  } catch { /* ignore */ }
+  return 'video.mp4';
+}
+
+function parseItemInfo(item) {
+  const isFbTab = fb.isFacebookTab(currentTabUrl);
+
+  // 1. YouTube
+  const ytInfo = ytb.parseItemInfo(item);
+  if (ytInfo) {
+    return { ...ytInfo, filename: getFilename(item, ytInfo) };
   }
 
-  return { platform, platformName, title, quality, filename, shortcode };
+  // 2. Instagram
+  const igInfo = ig.parseItemInfo(item, isFbTab);
+  if (igInfo) {
+    return { ...igInfo, filename: getFilename(item, igInfo) };
+  }
+
+  // 3. Facebook
+  const fbInfo = fb.parseItemInfo(item);
+  if (fbInfo) {
+    return { ...fbInfo, filename: getFilename(item, fbInfo) };
+  }
+
+  // 4. Mặc định
+  const defaultInfo = {
+    platform: 'generic',
+    platformName: 'Video File',
+    title: item.pageTitle || 'Video',
+    quality: 'MP4',
+  };
+  return { ...defaultInfo, filename: getFilename(item, defaultInfo) };
 }
 
 function renderItem(item) {
@@ -534,7 +447,6 @@ async function runDownload(items, button) {
 
   setStatus(`Đã gửi ${ids.length} file, đang kiểm tra…`);
 
-  // Server (đặc biệt là fbcdn) hay trả 403 sau khi đã nhận lệnh tải.
   setTimeout(async () => {
     try {
       const found = await chrome.downloads.search({ id: ids });
@@ -604,9 +516,7 @@ if (el.btnReloadExt) {
     setStatus('Đang nạp lại Extension & Tab…', 'ok');
     try {
       await chrome.runtime.sendMessage({ type: 'debug:reload', tabId });
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
     setTimeout(() => window.close(), 300);
   });
 }

@@ -1,12 +1,16 @@
 /**
- * background.js — service worker.
+ * src/background.js — Service Worker.
  *
  * Nhiệm vụ:
- *   - Gom item do content script gửi lên, lưu theo tabId trong storage.session
- *     (service worker bị Chrome kill bất cứ lúc nào, nên không giữ trong RAM).
+ *   - Gom item do content script gửi lên, lưu theo tabId trong storage.session.
  *   - Xoá dữ liệu khi tab điều hướng sang trang khác.
- *   - Thực hiện tải file qua chrome.downloads (tự gắn cookie của domain).
+ *   - Thực hiện tải file qua chrome.downloads.
+ *   - Sử dụng các module social (fb, ig, ytb) để xử lý logic đặc thù từng nền tảng.
  */
+
+import * as fb from './social/fb/background.js';
+import * as ig from './social/ig/background.js';
+import * as ytb from './social/ytb/background.js';
 
 // Logger tiện ích cho background script
 const log = {
@@ -36,7 +40,6 @@ const log = {
 log.info('Service Worker đã sẵn sàng');
 
 const PREFIX = 'tab:';
-
 const keyFor = (tabId) => PREFIX + tabId;
 
 async function readItems(tabId) {
@@ -50,37 +53,25 @@ async function writeItems(tabId, list) {
   updateBadge(tabId, list.length);
 }
 
-function facebookMediaKey(item) {
-  try {
-    const page = new URL(item.pageUrl);
-    const media = new URL(item.url);
-    if (!/(^|\.)(facebook\.com|fb\.com)$/i.test(page.hostname)
-      || !/(^|\.)fbcdn\.net$/i.test(media.hostname)) return item.url;
-    return 'fbcdn:' + media.pathname;
-  } catch {
-    return item.url;
-  }
+function getItemKey(item) {
+  return fb.facebookMediaKey(item);
 }
 
 async function addItems(tabId, incoming) {
   const current = await readItems(tabId);
-  const byKey = new Map(current.map((i) => [facebookMediaKey(i), i]));
+  const byKey = new Map(current.map((i) => [getItemKey(i), i]));
   let changed = false;
+
   for (const item of incoming) {
     if (!item || !item.url) continue;
-    try {
-      const page = new URL(item.pageUrl);
-      const media = new URL(item.url);
-      if (/(^|\.)(facebook\.com|fb\.com)$/i.test(page.hostname)
-        && /(^|\.)fbcdn\.net$/i.test(media.hostname)
-        && (media.searchParams.has('bytestart') || media.searchParams.has('byteend'))) continue;
-    } catch { /* keep generic URLs unchanged */ }
-    const key = facebookMediaKey(item);
+
+    // Lọc bỏ segment stream byte range của Facebook
+    if (fb.isIgnored(item)) continue;
+
+    const key = getItemKey(item);
     const existing = byKey.get(key);
     if (existing) {
-      if (existing.url !== item.url && key.startsWith('fbcdn:')) {
-        existing.url = item.url;
-        existing.host = item.host;
+      if (fb.updateExisting(existing, item, key)) {
         changed = true;
       }
       if (Array.isArray(item.sources)) {
@@ -96,6 +87,7 @@ async function addItems(tabId, incoming) {
       }
       continue;
     }
+
     if (item.isCurrent) {
       for (const it of current) it.isCurrent = false;
     }
@@ -103,6 +95,7 @@ async function addItems(tabId, incoming) {
     current.push(item);
     changed = true;
   }
+
   if (changed) {
     await writeItems(tabId, current);
     log.info(`[Tab ${tabId}] Đã lưu/cập nhật link. Tổng: ${current.length}`);
@@ -118,43 +111,32 @@ function updateBadge(tabId, count) {
 
 // --------------------------------------------------------------- tải file
 
-/** Rút tên file an toàn từ URL. Dùng ytMeta nếu có (YouTube) hoặc shortcode (Instagram). */
+/** Rút tên file an toàn từ URL. Sử dụng social modules tương ứng. */
 function filenameFor(url, index, meta) {
-  let base = 'video';
-  const ytMeta = (meta && meta.ytMeta) || null;
+  let base = null;
 
-  // YouTube: dùng title video + quality label
-  if (ytMeta && ytMeta.title) {
-    const safe = ytMeta.title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim();
-    const quality = ytMeta.quality || '';
-    const isAudio = ytMeta.isAudio;
-    const ext = isAudio ? '.webm' : '.mp4';
-    base = safe + (quality ? ' [' + quality + ']' : '') + ext;
-  } else if (meta && meta.pageUrl && /instagram\.com\/(?:reel|reels|p)\/([A-Za-z0-9_-]+)/i.test(meta.pageUrl)) {
-    const igMatch = meta.pageUrl.match(/instagram\.com\/(?:reel|reels|p)\/([A-Za-z0-9_-]+)/i);
-    base = `instagram_${igMatch[1]}.mp4`;
-  } else {
+  // 1. YouTube
+  base = ytb.formatFilename(url, index, meta);
+
+  // 2. Instagram
+  if (!base) {
+    base = ig.formatFilename(url, index, meta);
+  }
+
+  // 3. Fallback URL thông thường
+  if (!base) {
+    base = 'video';
     try {
       const u = new URL(url);
       const last = u.pathname.split('/').filter(Boolean).pop() || '';
       if (last && /\.[a-z0-9]{2,5}$/i.test(last)) base = decodeURIComponent(last);
       else if (last) base = decodeURIComponent(last) + '.mp4';
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   }
 
   base = base.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').slice(0, 180);
   if (!/\.[a-z0-9]{2,5}$/i.test(base)) base += '.mp4';
   return index != null ? `${String(index + 1).padStart(2, '0')}_${base}` : base;
-}
-
-function hostnameOf(url) {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return '';
-  }
 }
 
 /** Hỏi content script của tab xem URL có tải được thật không. */
@@ -172,20 +154,10 @@ async function downloadOne(item, index, total, tabId) {
   const meta = typeof item === 'object' ? item : null;
   const filename = filenameFor(url, total > 1 ? index : null, meta);
 
-  // YouTube: link trong player response có tham số `n` chưa được player giải mã nên
-  // googlevideo trả 403 kèm Content-Type text/plain → Chrome lưu thành file .txt rác
-  // và báo "hoàn tất". Thử một range 2 byte trước để biết chắc rồi mới tải.
-  if (/(^|\.)googlevideo\.com$/i.test(hostnameOf(url))) {
-    const probe = await probeMediaUrl(tabId, url);
-    if (probe && probe.ok === false) {
-      const error =
-        probe.status === 403
-          ? 'HTTP 403 — YouTube từ chối link tải trực tiếp (n-sig/PO token). '
-          + 'Bấm Play cho video chạy rồi Quét sâu lại để lấy link "live".'
-          : `HTTP ${probe.status || '?'} — link bị từ chối.`;
-      log.err(`Link YouTube bị từ chối (${error})`, url);
-      return { ok: false, url, error };
-    }
+  // Kiểm tra probe cho YouTube (tránh 403 lưu file .txt rác)
+  const probeCheck = await ytb.probeYouTubeUrl(tabId, url, probeMediaUrl, log);
+  if (!probeCheck.shouldDownload) {
+    return { ok: false, url, error: probeCheck.error };
   }
 
   try {
@@ -246,7 +218,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.type === 'popup:download') {
     const list = msg.items || [];
-    // Popup gửi kèm tabId vì message từ popup không có sender.tab.
     const targetTab = msg.tabId != null ? msg.tabId : tabId;
     log.info(`Yêu cầu tải ${list.length} file`);
     Promise.all(list.map((it, i) => downloadOne(it, i, list.length, targetTab))).then((results) =>
