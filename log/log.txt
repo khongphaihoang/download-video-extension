@@ -1,0 +1,233 @@
+background.js:14 [VG:Background] Service Worker đã sẵn sàng
+background.js:14 [VG:Background] [Tab 1532914575] Đã lưu 25 link mới. Tổng: 25
+background.js:14 [VG:Background] [Tab 1532914575] Đã lưu 1 link mới. Tổng: 26
+background.js:14 [VG:Background] [Tab 1532914575] Đã lưu 1 link mới. Tổng: 27
+background.js:14 [VG:Background] [Tab 1532914575] Đã lưu 1 link mới. Tổng: 28
+background.js:14 [VG:Background] [Tab 1532914575] Đã lưu 25 link mới. Tổng: 25
+background.js:14 [VG:Background] Quét sâu tab 1532914575
+background.js:14 [VG:Background] Yêu cầu tải 25 file (tab: 1532914575)
+background.js:14 [VG:Background] [YT] Tải qua page context: 01_jb [ab].mp4
+background.js:14 [VG:Background] [YT] Tải qua page context: 02_lpk65FOR6 [360p].mp4
+background.js:14 [VG:Background] [YT] Tải qua page context: 03_lpk65FOR6 [720p].mp4
+background.js:14 [VG:Background] [YT] Tải qua page context: 04_lpk65FOR6 [1080p].mp4
+background.js:14 [VG:Background] [YT] Tải qua page context: 05_lpk65FOR6 [1080p].mp4
+background.js:14 [VG:Background] [YT] Tải qua page context: 06_lpk65FOR6 [1080p].mp4
+background.js:14 [VG:Background] [YT] Tải qua page context: 07_lpk65FOR6 [720p].mp4
+background.js:14 [VG:Background] [YT] Tải qua page context: 08_lpk65FOR6 [720p].mp4
+background.js:14 [VG:Background] [YT] Tải qua page context: 09_lpk65FOR6 [720p].mp4
+background.js:14 [VG:Background] [YT] Tải qua page context: 10_lpk65FOR6 [480p].mp4
+background.js:14 [VG:Background] [YT] Tải qua page context: 11_lpk65FOR6 [480p].mp4
+background.js:14 [VG:Background] [YT] Tải qua page context: 12_lpk65FOR6 [480p].mp4
+background.js:14 [VG:Background] [YT] Tải qua page context: 13_lpk65FOR6 [360p].mp4
+background.js:14 [VG:Background] [YT] Tải qua page context: 14_lpk65FOR6 [360p].mp4
+background.js:14 [VG:Background] [YT] Tải qua page context: 15_lpk65FOR6 [360p].mp4
+background.js:14 [VG:Background] [YT] Tải qua page context: 16_lpk65FOR6 [240p].mp4
+background.js:14 [VG:Background] [YT] Tải qua page context: 17_lpk65FOR6 [240p].mp4
+background.js:14 [VG:Background] [YT] Tải qua page context: 18_lpk65FOR6 [240p].mp4
+background.js:14 [VG:Background] [YT] Tải qua page context: 19_lpk65FOR6 [144p].mp4
+background.js:14 [VG:Background] [YT] Tải qua page context: 20_lpk65FOR6 [144p].mp4
+background.js:14 [VG:Background] [YT] Tải qua page context: 21_lpk65FOR6 [144p].mp4
+background.js:14 [VG:Background] [YT] Tải qua page context: 22_lpk65FOR6 [audio].webm
+background.js:14 [VG:Background] [YT] Tải qua page context: 23_lpk65FOR6 [audio].webm
+background.js:14 [VG:Background] [YT] Tải qua page context: 24_lpk65FOR6 [audio].webm
+background.js:14 [VG:Background] [YT] Tải qua page context: 25_lpk65FOR6 [audio].webm
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (1/25): 01_jb [ab].mp4 https://rr3---sn-n4v7sns7.googlevideo.com/videoplayback?expire=1697267654&source=youtube&requiressl=yes
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (25/25): 25_lpk65FOR6 [audio].webm https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=251&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=audio%2Fwebm&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=49556100&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=LKbaBRMKrh_dcka9lgrM8qs_JhjIVNtANwUTB288gllt7QQyjsdETiSxkQ5pk_ekeiOUs0iX5u_0zSrjB4EB_1HP5feP_4OQhHuS&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (2/25): 02_lpk65FOR6 [360p].mp4 https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=18&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=video%2Fmp4&ns=t4ZojJqUxangiNmQXe93MQO1&cnr=67&ratebypass=yes&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&c=WEB&txp=3735999&n=yRfYMtok-PaP273M&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Ccnr%2Cratebypass%2Cdur%2Clmt&sig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (3/25): 03_lpk65FOR6 [720p].mp4 https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=22&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=video%2Fmp4&ns=t4ZojJqUxangiNmQXe93MQO1&cnr=67&ratebypass=yes&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&c=WEB&txp=3735999&n=yRfYMtok-PaP273M&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Ccnr%2Cratebypass%2Cdur%2Clmt&sig=JJo3zZRvWNDyC4ZJqMHzFxZ8Ew4gBf3SRAnU5lwTcPHe8z8XXjtr7sWOr1EEOiFdk7i6xbJUGkllKGIjMjiQnIwHB5sFKskZ0Zx4WfHPukJs&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (4/25): 04_lpk65FOR6 [1080p].mp4 https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=137&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=video%2Fmp4&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=727663636&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=LKbaBRMKrh_dcka9lgrM8qs_JhjIVNtANwUTB288gllt7QQyjsdETiSxkQ5pk_ekeiOUs0iX5u_0zSrjB4EB_1HP5feP_4OQhHuS&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (5/25): 05_lpk65FOR6 [1080p].mp4 https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=248&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=video%2Fwebm&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=727663636&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=WZQO00_J4GQGYyYvcyYprcHdIt8p6Wya-3NrAAtHIeIXQ5XCnE-_eC2_bQRTxUc7MAqUu5o9x8mrFp9DbB9bgEWYGCZ9RoFItLRoG9VeRg&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (6/25): 06_lpk65FOR6 [1080p].mp4 https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=399&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=video%2Fmp4&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=727663636&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=LKbaBRMKrh_dcka9lgrM8qs_JhjIVNtANwUTB288gllt7QQyjsdETiSxkQ5pk_ekeiOUs0iX5u_0zSrjB4EB_1HP5feP_4OQhHuS&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (7/25): 07_lpk65FOR6 [720p].mp4 https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=136&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=video%2Fmp4&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=727663636&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (8/25): 08_lpk65FOR6 [720p].mp4 https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=247&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=video%2Fwebm&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=727663636&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (21/25): 21_lpk65FOR6 [144p].mp4 https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=394&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=video%2Fmp4&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=49556100&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=LKbaBRMKrh_dcka9lgrM8qs_JhjIVNtANwUTB288gllt7QQyjsdETiSxkQ5pk_ekeiOUs0iX5u_0zSrjB4EB_1HP5feP_4OQhHuS&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (20/25): 20_lpk65FOR6 [144p].mp4 https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=278&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=video%2Fwebm&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=49556100&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (22/25): 22_lpk65FOR6 [audio].webm https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=140&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=audio%2Fmp4&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=49556100&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=WZQO00_J4GQGYyYvcyYprcHdIt8p6Wya-3NrAAtHIeIXQ5XCnE-_eC2_bQRTxUc7MAqUu5o9x8mrFp9DbB9bgEWYGCZ9RoFItLRoG9VeRg&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (23/25): 23_lpk65FOR6 [audio].webm https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=249&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=audio%2Fwebm&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=3735999&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=WZQO00_J4GQGYyYvcyYprcHdIt8p6Wya-3NrAAtHIeIXQ5XCnE-_eC2_bQRTxUc7MAqUu5o9x8mrFp9DbB9bgEWYGCZ9RoFItLRoG9VeRg&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (24/25): 24_lpk65FOR6 [audio].webm https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=250&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=audio%2Fwebm&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=3735999&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=WZQO00_J4GQGYyYvcyYprcHdIt8p6Wya-3NrAAtHIeIXQ5XCnE-_eC2_bQRTxUc7MAqUu5o9x8mrFp9DbB9bgEWYGCZ9RoFItLRoG9VeRg&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (9/25): 09_lpk65FOR6 [720p].mp4 https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=398&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=video%2Fmp4&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=727663636&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (10/25): 10_lpk65FOR6 [480p].mp4 https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=135&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=video%2Fmp4&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=49556100&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (12/25): 12_lpk65FOR6 [480p].mp4 https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=397&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=video%2Fmp4&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=49556100&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=LKbaBRMKrh_dcka9lgrM8qs_JhjIVNtANwUTB288gllt7QQyjsdETiSxkQ5pk_ekeiOUs0iX5u_0zSrjB4EB_1HP5feP_4OQhHuS&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (11/25): 11_lpk65FOR6 [480p].mp4 https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=244&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=video%2Fwebm&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=49556100&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=JJo3zZRvWNDyC4ZJqMHzFxZ8Ew4gBf3SRAnU5lwTcPHe8z8XXjtr7sWOr1EEOiFdk7i6xbJUGkllKGIjMjiQnIwHB5sFKskZ0Zx4WfHPukJs&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (13/25): 13_lpk65FOR6 [360p].mp4 https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=134&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=video%2Fmp4&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=49556100&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (14/25): 14_lpk65FOR6 [360p].mp4 https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=243&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=video%2Fwebm&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=49556100&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=WZQO00_J4GQGYyYvcyYprcHdIt8p6Wya-3NrAAtHIeIXQ5XCnE-_eC2_bQRTxUc7MAqUu5o9x8mrFp9DbB9bgEWYGCZ9RoFItLRoG9VeRg&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (15/25): 15_lpk65FOR6 [360p].mp4 https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=396&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=video%2Fmp4&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=49556100&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (17/25): 17_lpk65FOR6 [240p].mp4 https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=242&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=video%2Fwebm&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=49556100&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (16/25): 16_lpk65FOR6 [240p].mp4 https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=133&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=video%2Fmp4&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=49556100&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (18/25): 18_lpk65FOR6 [240p].mp4 https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=395&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=video%2Fmp4&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=49556100&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:28 [VG:Background] [YT] Thất bại: HEAD 403 . Thử fallback chrome.downloads…
+err @ background.js:28
+downloadOne @ background.js:127
+await in downloadOne
+(anonymous) @ background.js:254
+(anonymous) @ background.js:254
+background.js:14 [VG:Background] Đang tải (19/25): 19_lpk65FOR6 [144p].mp4 https://rr4---sn-ntq7yney.googlevideo.com/videoplayback?expire=5774653680&ei=G-GYSb-8HCQfthPlPWkCsIE&ip=7.96.89.97&id=o-AFJqnKGnqn8rcfLvTraRqLNdq1OVKItElpFyXWpxcYU0H&itag=160&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=X6&mm=107%2C29430%2C42383&mn=MQHG5%2COoqrz%2Cz4ZDX&ms=MQHG5%2COoqrz%2Cz4ZDX&mv=0&mvi=5&pl=67&initcwndbps=3735999&siu=5&spc=5-xgfJv05a9XGkbI5TIe5lglaL7j6t0MRVfKMB98c4NF&vprv=5&svpuc=5&mime=video%2Fmp4&ns=t4ZojJqUxangiNmQXe93MQO1&gir=BXH&clen=49556100&dur=49556100&lmt=3782504984525994&mt=5774653680&fvip=3&keepalive=BXH&c=WEB&txp=3735999&n=eAeJ0IH1hdVUvQ80&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Csiu%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=WZQO00_J4GQGYyYvcyYprcHdIt8p6Wya-3NrAAtHIeIXQ5XCnE-_eC2_bQRTxUc7MAqUu5o9x8mrFp9DbB9bgEWYGCZ9RoFItLRoG9VeRg&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=K_LYm-epfuUd1rd9oGAsA2bvNGYBw5ix0qFWj_SN1YYg5LJOdluSK5CEC2b8ZAxQYqsoUUefYlAZa6hvWWYl2z2XGOjJ7YE1i8G764hsdljy
+background.js:14 [VG:Background] Bắt đầu download ID: 44
+background.js:14 [VG:Background] Bắt đầu download ID: 45
+background.js:14 [VG:Background] Bắt đầu download ID: 46
+background.js:14 [VG:Background] Bắt đầu download ID: 47
+background.js:14 [VG:Background] Bắt đầu download ID: 48
+background.js:14 [VG:Background] Bắt đầu download ID: 49
+background.js:14 [VG:Background] Bắt đầu download ID: 50
+background.js:14 [VG:Background] Bắt đầu download ID: 51
+background.js:14 [VG:Background] Bắt đầu download ID: 52
+background.js:14 [VG:Background] Bắt đầu download ID: 53
+background.js:14 [VG:Background] Bắt đầu download ID: 54
+background.js:14 [VG:Background] Bắt đầu download ID: 55
+background.js:14 [VG:Background] Bắt đầu download ID: 56
+background.js:14 [VG:Background] Bắt đầu download ID: 57
+background.js:14 [VG:Background] Bắt đầu download ID: 58
+background.js:14 [VG:Background] Bắt đầu download ID: 59
+background.js:14 [VG:Background] Bắt đầu download ID: 60
+background.js:14 [VG:Background] Bắt đầu download ID: 61
+background.js:14 [VG:Background] Bắt đầu download ID: 62
+background.js:14 [VG:Background] Bắt đầu download ID: 63
+background.js:14 [VG:Background] Bắt đầu download ID: 64
+background.js:14 [VG:Background] Bắt đầu download ID: 65
+background.js:14 [VG:Background] Bắt đầu download ID: 66
+background.js:14 [VG:Background] Bắt đầu download ID: 67
+background.js:14 [VG:Background] Bắt đầu download ID: 68

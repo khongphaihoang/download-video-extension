@@ -373,8 +373,15 @@
       return;
     }
 
-    // Truyền toàn bộ metadata (isCurrent, title, pageUrl, label, ytMeta...)
+    // Truyền toàn bộ metadata (isCurrent, title, pageUrl, label...)
     const extra = d.meta ? { ...d.meta } : undefined;
+    // YouTube gởi meta PHẲNG (title, quality, isAudio...) nhưng popup và hàm đặt
+    // tên file lại đọc `item.ytMeta` → phải bọc lại ở đây. Nếu không, mọi item
+    // YouTube sẽ có ytMeta = null: mất tiêu đề/chất lượng khi đặt tên file và
+    // popup nhận nhầm thành video thường.
+    if (extra && !extra.ytMeta && typeof d.via === 'string' && d.via.startsWith('yt-')) {
+      extra.ytMeta = { ...extra };
+    }
     const source = 'inject:' + d.via;
     if (add(d.url, source, extra)) {
       const isYt = d.via && d.via.startsWith('yt-');
@@ -839,6 +846,28 @@
       scanAll();
       flush();
       sendResponse({ ok: true, count: items.size });
+      return true;
+    }
+
+    // Kiểm tra một URL có tải được thật không, TRƯỚC khi gọi chrome.downloads.
+    // YouTube trả 403 kèm Content-Type text/plain cho link có `n` chưa giải mã →
+    // nếu tải thẳng, Chrome sẽ lưu về file .txt rác và báo "hoàn tất".
+    if (msg.type === 'content:probe') {
+      (async () => {
+        try {
+          const res = await fetch(msg.url, {
+            headers: { Range: 'bytes=0-1' },
+            credentials: 'include',
+          });
+          sendResponse({
+            ok: res.ok,
+            status: res.status,
+            contentType: res.headers.get('content-type') || '',
+          });
+        } catch (err) {
+          sendResponse({ ok: false, status: 0, error: String(err) });
+        }
+      })();
       return true;
     }
 

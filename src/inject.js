@@ -91,6 +91,8 @@
 
   function report(url, via, meta) {
     try {
+      // Link videoplayback mà chính player gọi có `n` đã hợp lệ → ghi lại để dùng.
+      captureLiveMediaUrl(url);
       if (!isCandidate(url, via)) return;
       if ((via === 'fetch' || via === 'xhr') && Date.now() - lastActiveVideoTime < 3500
         && (!/(^|\.)(facebook\.com|fb\.com)$/i.test(location.hostname)
@@ -122,12 +124,248 @@
     } catch { /* ignore */ }
   }
 
+  /** itag -> nhãn chất lượng, dùng cho link bắt từ request của player (không có
+   *  `qualityLabel` như trong player response). */
+  const YT_ITAG = {
+    18: { q: '360p', h: 360 }, 22: { q: '720p', h: 720 }, 37: { q: '1080p', h: 1080 },
+    59: { q: '480p', h: 480 },
+    160: { q: '144p', h: 144 }, 133: { q: '240p', h: 240 }, 134: { q: '360p', h: 360 },
+    135: { q: '480p', h: 480 }, 136: { q: '720p', h: 720 }, 137: { q: '1080p', h: 1080 },
+    278: { q: '144p', h: 144 }, 242: { q: '240p', h: 240 }, 243: { q: '360p', h: 360 },
+    244: { q: '480p', h: 480 }, 247: { q: '720p', h: 720 }, 248: { q: '1080p', h: 1080 },
+    394: { q: '144p', h: 144 }, 395: { q: '240p', h: 240 }, 396: { q: '360p', h: 360 },
+    397: { q: '480p', h: 480 }, 398: { q: '720p', h: 720 }, 399: { q: '1080p', h: 1080 },
+    140: { q: 'audio', audio: true }, 141: { q: 'audio', audio: true },
+    249: { q: 'audio', audio: true }, 250: { q: 'audio', audio: true }, 251: { q: 'audio', audio: true },
+  };
+
+  /** Tiêu để + link "live" tốt nhất đã bắt được của video đang mở. */
+  let currentYtTitle = '';
+  let liveYtEntry = null;
+  const liveYtSeen = new Set();
+
+  /**
+   * Bắt URL media từ CHÍNH request của player.
+   *
+   * URL trong `ytInitialPlayerResponse` có tham số `n` ở dạng "thô" — player phải
+   * giải mã rồi mới gọi. Dùng URL thô sẽ bị googlevideo trả **403** (Content-Type
+   * text/plain), và Chrome lưu thành file `.txt` rác. Ngược lại, URL mà player
+   * thật sự gọi đã hợp lệ nên dùng lại được.
+   *
+   * Bỏ `range`/`rn`/... để có link của cả file. Bỏ qua luồng SABR/UMP vì nội dung
+   * trả về không phải file media thường.
+   */
+  function captureLiveMediaUrl(raw) {
+    if (typeof raw !== 'string' || raw.length < 20) return;
+    if (raw.indexOf('googlevideo.com/videoplayback') === -1) return;
+    let u;
+    try {
+      u = new URL(raw, location.href);
+    } catch {
+      return;
+    }
+    if (!/(^|\.)googlevideo\.com$/i.test(u.hostname)) return;
+    if (!/\/videoplayback$/i.test(u.pathname)) return;
+    if (u.searchParams.has('sabr')) return; // SABR/UMP: không phải file media thường
+    for (const p of ['range', 'rn', 'rbuf', 'sq', 'alr']) u.searchParams.delete(p);
+    const url = u.toString();
+    if (liveYtSeen.has(url)) return;
+    liveYtSeen.add(url);
+
+    const mime = (u.searchParams.get('mime') || '').toLowerCase();
+    const isAudio = mime.startsWith('audio/');
+    const isVideoOnly = u.searchParams.has('aitags');
+    const itag = u.searchParams.get('itag') || '';
+    const info = YT_ITAG[itag] || {};
+    const via = isAudio || isVideoOnly ? 'yt-adaptive' : 'yt-progressive';
+    const meta = {
+      label: 'YT ' + (info.q || (itag ? 'itag ' + itag : 'live')) + ' (live)',
+      quality: info.q || '',
+      mimeType: mime || '',
+      width: 0,
+      height: info.h || 0,
+      title: currentYtTitle,
+      videoId: currentYtVideoId() || '',
+      isAdaptive: via !== 'yt-progressive',
+      isAudio,
+      isLive: true,
+    };
+    log.info('🎯 [yt-live] Bắt được link player đang dùng:', url.slice(0, 90));
+    reportYt(url, via, meta);
+
+    // Ưu tiên bản progressive (có cả hình + tiếng) vì tải về là xem được ngay.
+    const rank = via === 'yt-progressive' ? 100000 + (info.h || 0) : isAudio ? -1 : info.h || 0;
+    const oldRank = liveYtEntry
+      ? liveYtEntry.via === 'yt-progressive' ? 100000 + (liveYtEntry.meta.height || 0) : liveYtEntry.meta.isAudio ? -1 : liveYtEntry.meta.height || 0
+      : -2;
+    if (rank > oldRank) {
+      liveYtEntry = { url, via, meta, pageId: ytVideoIdFromUrl(location.href) };
+    }
+  }
+
+  // ---- YouTube: xác định "video đang phát" ----------------------------------
+
+  /** Rút videoId từ URL YouTube (/watch?v=, /shorts/, /live/, /embed/, youtu.be). */
+  function ytVideoIdFromUrl(raw) {
+    try {
+      const u = new URL(raw, location.href);
+      const host = u.hostname;
+      if (/^(www\.|m\.)?youtu\.be$/i.test(host)) {
+        const id = u.pathname.split('/').filter(Boolean)[0] || '';
+        return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
+      }
+      if (!/^(www\.|m\.|music\.)?youtube\.com$/i.test(host)) return null;
+      const v = u.searchParams.get('v');
+      if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v;
+      const match = u.pathname.match(/^\/(?:shorts|live|embed|v)\/([A-Za-z0-9_-]{11})(?:\/|$)/i);
+      return match ? match[1] : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** videoId của video đang mở: ưu tiên URL, fallback `ytInitialPlayerResponse`. */
+  function currentYtVideoId() {
+    const fromUrl = ytVideoIdFromUrl(location.href);
+    if (fromUrl) return fromUrl;
+    try {
+      const details = window.ytInitialPlayerResponse && window.ytInitialPlayerResponse.videoDetails;
+      return (details && details.videoId) || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * videoId -> format progressive tốt nhất (có cả hình + tiếng, tải trực tiếp được).
+   *
+   * YouTube phát qua MSE nên `video.src` luôn là `blob:` — không thể đọc URL thật
+   * từ thẻ <video> như Instagram/Facebook. Bảng này là cầu nối giữa "video đang
+   * phát" (xác định bằng videoId) và link thật lấy từ player response.
+   * @type {Map<string, {url: string, meta: object}>}
+   */
+  const ytMap = new Map();
+
+  /** Format tốt nhất ghi nhận gần nhất — dùng làm phương án dự phòng. */
+  let lastYtEntry = null;
+
+  /** Link googlevideo đã hết hạn chưa? (`expire` tính bằng giây, có thể thiếu/sai.) */
+  function isExpiredYtUrl(url) {
+    try {
+      const raw = new URL(url).searchParams.get('expire');
+      if (!raw) return false;
+      const sec = Number(raw);
+      if (!Number.isFinite(sec) || sec <= 0) return false;
+      return sec * 1000 < Date.now();
+    } catch {
+      return false;
+    }
+  }
+
+  /** Chọn format chất lượng cao nhất trong một danh sách (bỏ qua audio-only). */
+  function pickBestFormat(list) {
+    let best = null;
+    for (const fmt of list || []) {
+      if (!fmt || typeof fmt.url !== 'string') continue;
+      if (fmt.mimeType && fmt.mimeType.startsWith('audio/')) continue;
+      // Link đã hết hạn thì không xem/tải được → đừng chọn làm "Đang xem".
+      if (isExpiredYtUrl(fmt.url)) continue;
+      if (!best || (Number(fmt.height) || 0) > (Number(best.height) || 0)) best = fmt;
+    }
+    return best;
+  }
+
+  /**
+   * Lưu format tốt nhất của một video để phục vụ nhãn "Đang xem".
+   *
+   * Ưu tiên progressive (có cả hình + tiếng, tải trực tiếp được). Nếu video chỉ
+   * có adaptive thì vẫn lấy bản hình nét nhất — thà hiện được link cho người dùng
+   * còn hơn để tab "Đang xem" trống. `via` được ghi lại để content.js phân loại
+   * đúng: chỉ 'yt-progressive' mới cho kind 'file'.
+   */
+  function recordYtVideo(videoId, title, formats, adaptiveFormats) {
+    let best = pickBestFormat(formats);
+    let via = 'yt-progressive';
+    if (!best) {
+      best = pickBestFormat(adaptiveFormats);
+      via = 'yt-adaptive';
+    }
+    if (!best) return;
+
+    const entry = {
+      url: best.url,
+      via,
+      meta: {
+        label: 'YT ' + (best.qualityLabel || '?'),
+        quality: best.qualityLabel || '',
+        mimeType: best.mimeType || '',
+        width: best.width || 0,
+        height: best.height || 0,
+        title: title || '',
+        videoId: videoId || '',
+        isAdaptive: via !== 'yt-progressive',
+        isAudio: false,
+      },
+    };
+
+    // Ghi theo videoId của player response. Chỉ khi response KHÔNG có videoId mới
+    // mượn id trên URL — tránh việc YouTube prefetch sẵn player response của bài
+    // kế tiếp (playlist/autoplay) rồi map nhầm nó cho video đang mở.
+    const ids = new Set();
+    if (videoId) ids.add(videoId);
+    else if (currentYtVideoId()) ids.add(currentYtVideoId());
+    if (!ids.size) ids.add('__current'); // không suy được id → vẫn giữ entry dự phòng
+    for (const id of ids) ytMap.set(id, entry);
+    lastYtEntry = entry;
+  }
+
+  let ytCurrentRetryTimer = null;
+
+  /**
+   * Báo item "Đang xem" cho video YouTube hiện tại.
+   *
+   * `via` bắt buộc là 'yt-progressive': content.js nhận URL googlevideo.com dựa
+   * trên tiền tố `inject:yt-`, và chỉ 'yt-progressive' mới được gán kind 'file'
+   * (link tải trực tiếp được). Dùng via khác sẽ khiến link bị xếp nhầm là adaptive.
+   * @returns {boolean} true nếu đã báo được (ytMap đã có format của video này).
+   */
+  function reportYtCurrent() {
+    const pageId = ytVideoIdFromUrl(location.href);
+    // 1. Link bắt từ chính request của player: đây là link CÒN HIỆU LỰC thật sự,
+    //    trong khi link trong player response thường bị 403 (n-sig chưa giải).
+    if (liveYtEntry && liveYtEntry.pageId === pageId) {
+      reportYt(liveYtEntry.url, liveYtEntry.via, { ...liveYtEntry.meta, isCurrent: true });
+      return true;
+    }
+    // 2. Link từ player response: đúng nhưng có thể bị YouTube từ chối khi tải.
+    const id = currentYtVideoId();
+    let entry = id ? ytMap.get(id) : null;
+    if (!entry && pageId) entry = lastYtEntry;
+    if (!entry) return false;
+    reportYt(entry.url, entry.via || 'yt-progressive', { ...entry.meta, isCurrent: true });
+    return true;
+  }
+
+  /**
+   * Báo "Đang xem" ngay; nếu player response tới muộn (video đã phát trước khi
+   * có format) thì thử lại trong vài giây.
+   */
+  function ensureYtCurrentReport() {
+    if (reportYtCurrent()) return;
+    clearInterval(ytCurrentRetryTimer);
+    let tries = 0;
+    ytCurrentRetryTimer = setInterval(() => {
+      if (reportYtCurrent() || ++tries > 20) clearInterval(ytCurrentRetryTimer);
+    }, 250);
+  }
+
   /** Trích xuất progressive + adaptive formats từ player response. */
   function extractYouTubeFormats(playerResponse) {
     if (!playerResponse || !playerResponse.streamingData) return;
     const sd = playerResponse.streamingData;
     const title = (playerResponse.videoDetails && playerResponse.videoDetails.title) || '';
     const videoId = (playerResponse.videoDetails && playerResponse.videoDetails.videoId) || '';
+    currentYtTitle = title;
 
     // Progressive formats — video+audio kết hợp, TẢI TRỰC TIẾP ĐƯỢC
     const formats = sd.formats || [];
@@ -166,6 +404,14 @@
         isAudio: !!isAudio,
       });
     }
+
+    // Ghi nhớ format tốt nhất của video này để gắn nhãn "Đang xem".
+    recordYtVideo(videoId, title, formats, adaptive);
+
+    // Player response này là của video đang mở trong tab → gắn nhãn "Đang xem"
+    // ngay, không cần chờ sự kiện play (video có thể đang tạm dừng vì autoplay
+    // bị chặn, nhưng đây vẫn là video người dùng đang xem).
+    reportYtCurrent();
   }
 
   // Poll chờ ytInitialPlayerResponse được set (page load)
@@ -178,6 +424,17 @@
       }
       if (++_ytAttempts > 60) clearInterval(_ytPoll); // tối đa 6 giây
     }, 100);
+
+    // YouTube SPA đôi khi replaceState để thêm/bớt query → background coi như
+    // điều hướng mới và xoá danh sách của tab. Tự khẳng định lại nhãn "Đang xem"
+    // để item hiện tại luôn có mặt trong popup.
+    setInterval(() => {
+      try {
+        reportYtCurrent();
+      } catch {
+        /* ignore */
+      }
+    }, 3000);
   }
 
   // ---- Facebook video URL keys — dùng để quét JSON response ---------------
@@ -347,6 +604,13 @@
     if (!videoEl) return;
     lastActiveVideoTime = Date.now();
     lastActiveVideoEl = videoEl;
+
+    // YouTube: src là `blob:` nên React Fiber không giúp được — xác định video
+    // đang phát theo videoId trên URL rồi lấy link từ ytMap.
+    if (isYouTubePage()) {
+      ensureYtCurrentReport();
+      return;
+    }
 
     // 1. Thử trích xuất từ React Fiber của thẻ <video>
     const fromFiber = extractVideoFromElement(videoEl);
@@ -572,9 +836,9 @@
                     } catch { /* JSON parse fail — bỏ qua */ }
                   }
                 } catch { /* ignore */ }
-              }).catch(() => {});
+              }).catch(() => { });
             } catch { /* ignore */ }
-          }).catch(() => {});
+          }).catch(() => { });
         }
       } catch {
         /* ignore */

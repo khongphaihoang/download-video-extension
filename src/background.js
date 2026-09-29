@@ -112,8 +112,8 @@ async function addItems(tabId, incoming) {
 
 function updateBadge(tabId, count) {
   const text = count > 99 ? '99+' : count ? String(count) : '';
-  chrome.action.setBadgeText({ tabId, text }).catch(() => {});
-  chrome.action.setBadgeBackgroundColor({ tabId, color: '#2f6feb' }).catch(() => {});
+  chrome.action.setBadgeText({ tabId, text }).catch(() => { });
+  chrome.action.setBadgeBackgroundColor({ tabId, color: '#2f6feb' }).catch(() => { });
 }
 
 // --------------------------------------------------------------- tải file
@@ -149,10 +149,45 @@ function filenameFor(url, index, meta) {
   return index != null ? `${String(index + 1).padStart(2, '0')}_${base}` : base;
 }
 
-async function downloadOne(item, index, total) {
+function hostnameOf(url) {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return '';
+  }
+}
+
+/** Hỏi content script của tab xem URL có tải được thật không. */
+async function probeMediaUrl(tabId, url) {
+  if (tabId == null) return null;
+  try {
+    return await chrome.tabs.sendMessage(tabId, { type: 'content:probe', url });
+  } catch {
+    return null;
+  }
+}
+
+async function downloadOne(item, index, total, tabId) {
   const url = typeof item === 'string' ? item : item.url;
   const meta = typeof item === 'object' ? item : null;
   const filename = filenameFor(url, total > 1 ? index : null, meta);
+
+  // YouTube: link trong player response có tham số `n` chưa được player giải mã nên
+  // googlevideo trả 403 kèm Content-Type text/plain → Chrome lưu thành file .txt rác
+  // và báo "hoàn tất". Thử một range 2 byte trước để biết chắc rồi mới tải.
+  if (/(^|\.)googlevideo\.com$/i.test(hostnameOf(url))) {
+    const probe = await probeMediaUrl(tabId, url);
+    if (probe && probe.ok === false) {
+      const error =
+        probe.status === 403
+          ? 'HTTP 403 — YouTube từ chối link tải trực tiếp (n-sig/PO token). '
+          + 'Bấm Play cho video chạy rồi Quét sâu lại để lấy link "live".'
+          : `HTTP ${probe.status || '?'} — link bị từ chối.`;
+      log.err(`Link YouTube bị từ chối (${error})`, url);
+      return { ok: false, url, error };
+    }
+  }
+
   try {
     log.info(`Đang tải (${index + 1}/${total}): ${filename}`, url);
     const id = await chrome.downloads.download({
@@ -211,8 +246,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.type === 'popup:download') {
     const list = msg.items || [];
+    // Popup gửi kèm tabId vì message từ popup không có sender.tab.
+    const targetTab = msg.tabId != null ? msg.tabId : tabId;
     log.info(`Yêu cầu tải ${list.length} file`);
-    Promise.all(list.map((it, i) => downloadOne(it, i, list.length))).then((results) =>
+    Promise.all(list.map((it, i) => downloadOne(it, i, list.length, targetTab))).then((results) =>
       sendResponse({ ok: true, results })
     );
     return true;
@@ -222,7 +259,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'debug:reload') {
     log.info('🔄 Nhận lệnh nạp lại Extension & Tab:', msg.tabId);
     if (msg.tabId) {
-      chrome.tabs.reload(msg.tabId).catch(() => {});
+      chrome.tabs.reload(msg.tabId).catch(() => { });
     }
     setTimeout(() => {
       chrome.runtime.reload();

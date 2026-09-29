@@ -38,11 +38,14 @@
 
     <div id="ytNotice" class="yt-notice hidden">
       <div class="yt-notice-icon">▶️</div>
-      <p class="yt-notice-title">YouTube — đã hỗ trợ</p>
+      <p class="yt-notice-title">YouTube — hạn chế đã biết</p>
       <p class="yt-notice-desc">
-        Link <b>file</b> = video+audio (tải trực tiếp).<br />
-        Link <b>yt-adapt</b> = chỉ hình hoặc chỉ tiếng (cần ghép bằng ffmpeg).<br />
-        Tốc độ tải có thể bị YouTube giới hạn — kiên nhẫn chờ.
+        YouTube ký link theo phiên (<b>n-sig</b>) nên link lấy từ player response
+        thường bị trả <b>403</b> khi tải thẳng — trước đây Chrome lưu về file
+        <b>.txt</b> rác. Extension giờ kiểm tra trước và báo lỗi rõ ràng.<br />
+        Link gắn nhãn <b>live</b> là link bắt từ chính request của player — loại
+        này tải được. Hãy bấm <b>Play</b> rồi <b>Quét sâu</b> để có link live.<br />
+        <b>file</b> = video+audio · <b>yt-adapt</b> = chỉ hình hoặc chỉ tiếng.
       </p>
     </div>
 

@@ -63,7 +63,9 @@ async function runDiag() {
 
   let res = null;
   try {
-    res = await chrome.tabs.sendMessage(tabId, { type: 'content:ping' });
+    // Chỉ hỏi frame chính: YouTube có nhiều iframe, nếu hỏi cả tab thì câu trả lời
+    // đầu tiên có thể đến từ iframe (báo 0 URL) và chẩn đoán sẽ sai.
+    res = await chrome.tabs.sendMessage(tabId, { type: 'content:ping' }, { frameId: 0 });
   } catch {
     res = null;
   }
@@ -280,11 +282,21 @@ function parseItemInfo(item) {
   })());
 
   // 1. YouTube
-  if (item.ytMeta) {
+  // Nhận diện theo cả host/kid để item cũ lỡ thiếu ytMeta vẫn hiển thị đúng.
+  if (
+    item.ytMeta ||
+    item.kind === 'yt-adaptive' ||
+    /(^|\.)googlevideo\.com$/i.test(host) ||
+    /(^|\.)youtube\.com$/i.test(host)
+  ) {
     platform = 'youtube';
     platformName = 'YouTube';
-    title = item.ytMeta.title || item.pageTitle || 'YouTube Video';
-    quality = item.ytMeta.quality || (item.ytMeta.isAudio ? 'Audio' : 'Video');
+    title = (item.ytMeta && item.ytMeta.title) || item.pageTitle || 'YouTube Video';
+    quality =
+      (item.ytMeta && item.ytMeta.quality) ||
+      (item.ytMeta && item.ytMeta.isAudio ? 'Audio' : item.kind === 'file' ? 'Progressive' : 'Adaptive');
+    // Link bắt từ chính request của player (n-sig đã hợp lệ) mới tải được thật.
+    if (item.ytMeta && item.ytMeta.isLive) quality += ' • live';
   }
   // 2. Instagram
   else if (
@@ -331,9 +343,14 @@ function parseItemInfo(item) {
     }
   }
 
-  // Tên file dự kiến
+  // Tên file dự kiến — phải khớp filenameFor() trong background.js
   let filename = 'video.mp4';
-  if (shortcode) {
+  if (item.ytMeta && item.ytMeta.title) {
+    const safeTitle = item.ytMeta.title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim();
+    const ytQuality = item.ytMeta.quality || '';
+    const ytExt = item.ytMeta.isAudio ? '.webm' : '.mp4';
+    filename = safeTitle + (ytQuality ? ' [' + ytQuality + ']' : '') + ytExt;
+  } else if (shortcode) {
     filename = `instagram_${shortcode}.mp4`;
   } else {
     try {
@@ -493,6 +510,7 @@ async function runDownload(items, button) {
 
   const res = await chrome.runtime.sendMessage({
     type: 'popup:download',
+    tabId,
     items: items.map((i) => ({
       url: i.url,
       ytMeta: i.ytMeta || null,

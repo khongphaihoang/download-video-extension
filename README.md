@@ -35,11 +35,36 @@ sẵn có của bạn, nên nội dung trong group kín truy cập được mà 
 
 1. Mở video YouTube bất kỳ
 2. Đợi 1–2 giây để extension quét `ytInitialPlayerResponse`
-3. Mở popup → danh sách link hiện ra:
+3. Mở popup — tab **⚡ Đang xem** (mặc định) hiển thị đúng video đang phát,
+   gắn nhãn **🔥 ĐANG XEM**, xếp lên đầu danh sách
+4. Sang tab **Tất cả** để xem toàn bộ link đã bắt:
    - **file** (xanh) = progressive stream, có cả video+audio, tải trực tiếp
    - **yt-adapt** (tím) = adaptive stream, chỉ hình hoặc chỉ tiếng
-4. **Luôn ưu tiên link `file`** (thường có 360p và 720p)
-5. Tải adaptive cần ghép bằng `ffmpeg` ngoài extension
+5. **Luôn ưu tiên link `file`** (thường có 360p và 720p)
+6. Tải adaptive cần ghép bằng `ffmpeg` ngoài extension
+
+> **Cách extension biết video nào đang phát:** YouTube phát qua MSE nên
+> `video.src` luôn là `blob:` — không đọc được link thật từ thẻ `<video>`.
+> `inject.js` lấy `videoId` từ URL (`/watch?v=`, `/shorts/`, `/live/`), đối chiếu
+> với bảng `videoId → format progressive tốt nhất` dựng từ player response, rồi
+> mới gắn cờ `isCurrent` cho đúng link đó. Vì vậy link "Đang xem" luôn là bản
+> nét nhất và tải trực tiếp được.
+
+> ⚠️ **Vì sao tải YouTube hay lỗi 403 (và trước đây ra file `.txt`):**
+> URL trong `ytInitialPlayerResponse` có tham số `n` ở dạng **chưa giải mã** —
+> chính player phải biến đổi `n` rồi mới gọi được. Gọi thẳng URL thô sẽ bị googlevideo
+> trả `403` kèm `Content-Type: text/plain`, và Chrome lưu body rỗng đó thành `.txt`
+> (đánh dấu "hoàn tất", nên rất dễ tưởng là đã tải xong).
+> Vì vậy extension:
+> 1. **Kiểm tra trước** bằng `Range: bytes=0-1` (message `content:probe`); nếu server
+>    từ chối thì báo lỗi rõ ràng thay vì tạo file rác.
+> 2. **Bắt link "live"** — URL `/videoplayback` mà chính player đã gọi, tức `n` đã
+>    hợp lệ. Link này gắn nhãn `(live)` và tải được. Bỏ `range`/`rn` để lấy cả file;
+>    luồng **SABR/UMP** (`sabr=1`) bị bỏ qua vì nội dung không phải file media thường.
+>
+> Muốn có link live: **bấm Play cho video chạy** vài giây rồi mở popup. Nếu video chỉ
+> chạy qua SABR, extension sẽ không có link tải được — đây là giới hạn phía YouTube,
+> không phải lỗi extension.
 
 > Tốc độ tải YouTube có thể bị throttle (~50 KB/s). Đây là hạn chế phía server
 > của YouTube (n-parameter throttling), không phải lỗi extension.
