@@ -26,7 +26,7 @@
   const BAD_RE = /\.(jpe?g|png|gif|webp|svg|css|js|mjs|woff2?|ttf|ico|json|map|m3u8|mpd|ts|m4s)(\?|#|$)/i;
 
   const MEDIA_HOST_RE =
-    /(^|\.)(video[^.]*\.fbcdn\.net|fbcdn\.net|cdninstagram\.com|googlevideo\.com|video\.twimg\.com|vimeocdn\.com|tiktokcdn\.com|tiktokcdn-us\.com|akamaized\.net|cloudfront\.net|mux\.com|bunnycdn\.com|streamable\.com|dailymotion\.com|jwplayer\.com|brightcove\.net|kaltura\.com)$/i;
+    /(^|\.)(video[^.]*\.fbcdn\.net|scontent[^.]*\.fbcdn\.net|cdninstagram\.com|googlevideo\.com|video\.twimg\.com|vimeocdn\.com|tiktokcdn\.com|tiktokcdn-us\.com|akamaized\.net|cloudfront\.net|mux\.com|bunnycdn\.com|streamable\.com|dailymotion\.com|jwplayer\.com|brightcove\.net|kaltura\.com)$/i;
 
   // Logger
   const log = {
@@ -119,80 +119,115 @@
   }
 
   function cleanMediaUrl(raw) {
-    if (socialModules.fb && typeof socialModules.fb.cleanMediaUrl === 'function') {
-      return socialModules.fb.cleanMediaUrl(raw);
+    let cleaned = raw;
+    for (const module of Object.values(socialModules)) {
+      const normalizeUrl = module.normalize || module.cleanMediaUrl;
+      if (typeof normalizeUrl !== 'function') continue;
+      try {
+        const next = normalizeUrl.call(module, cleaned);
+        if (typeof next === 'string' && next !== cleaned) cleaned = next;
+      } catch { /* ignore plugin normalization errors */ }
     }
-    return raw;
+    return cleaned;
+  }
+
+  function evaluateCandidate(url, source, extra) {
+    let accepted = false;
+    let isCurrent = false;
+    let kind = null;
+    let label = null;
+
+    for (const module of Object.values(socialModules)) {
+      let result = null;
+      try {
+        if (typeof module.matchUrl === 'function') {
+          result = module.matchUrl(url, { source, extra, host: hostOf(url) });
+        } else if (typeof module.isCandidate === 'function') {
+          result = module.isCandidate(url, hostOf(url), source, extra);
+        }
+        const rejected = typeof module.isRejected === 'function' ? module.isRejected(url, FILE_RE) : null;
+        if (rejected && rejected.reject) return { reject: true, reason: rejected.reason };
+      } catch { /* ignore plugin matching errors */ }
+
+      if (!result) continue;
+      if (result.reject === true || result.allow === false) return { reject: true, reason: result.reason };
+      if (result.allow === true || result.isVideo === true || result === true) accepted = true;
+      if (result.isCurrent) isCurrent = true;
+      if (result.kind) kind = result.kind;
+      if (result.label) label = result.label;
+    }
+
+    for (const module of Object.values(socialModules)) {
+      if (typeof module.onCandidate !== 'function') continue;
+      try {
+        const result = module.onCandidate({ url, source, extra, items, add });
+        if (result && result.reject) return { reject: true, reason: result.reason };
+        if (result && result.isCurrent) isCurrent = true;
+        if (result && result.kind) kind = result.kind;
+        if (result && result.label) label = result.label;
+      } catch { /* ignore plugin candidate errors */ }
+    }
+
+    return { accepted, isCurrent, kind, label };
   }
 
   function add(raw, source, extra) {
+    const observedUrl = raw;
     const cleaned = cleanMediaUrl(raw);
     const url = normalize(cleaned);
     if (!url) return false;
 
-    // Xử lý stream segment Facebook
-    let fbProcess = { isCurrent: false };
-    if (socialModules.fb && typeof socialModules.fb.onProcessUrl === 'function') {
-      fbProcess = socialModules.fb.onProcessUrl(url, source, extra, items, add);
-    }
-
-    if (BAD_RE.test(url)) {
-      addLog('reject', source, url, { reason: 'Trùng BAD_RE (ảnh/style/script/segment/manifest)' });
+    if (BAD_RE.test(url) || /static[^.]*\.fbcdn\.net/i.test(url) || /\/btmanifest\//i.test(url) || /\/rsrc\.php\//i.test(url)) {
+      addLog('reject', source, url, { reason: 'Trùng BAD_RE (ảnh/style/script/segment/manifest/static)' });
       return false;
     }
 
     const host = hostOf(url);
+    if (/static[^.]*\.fbcdn\.net/i.test(host)) return false;
 
-    // Kiểm tra loại trừ qua Instagram (ảnh t51, dst-jpg)
-    if (socialModules.ig && typeof socialModules.ig.isRejected === 'function') {
-      const igRej = socialModules.ig.isRejected(url, FILE_RE);
-      if (igRej && igRej.reject) {
-        addLog('reject', source, url, { reason: igRej.reason });
-        return false;
-      }
+    const decision = evaluateCandidate(url, source, extra);
+    if (decision.reject) {
+      stats.rejected++;
+      addLog('reject', source, url, { reason: decision.reason || 'Plugin từ chối candidate' });
+      return false;
     }
+    const isFromSocialPlugin = decision.accepted;
 
-    // Kiểm tra chấp thuận qua YouTube
-    let isFromYtParser = typeof source === 'string' && source.startsWith('inject:yt-');
-    if (socialModules.ytb && typeof socialModules.ytb.isCandidate === 'function') {
-      const ytCandidate = socialModules.ytb.isCandidate(url, host, source);
-      if (ytCandidate) {
-        if (!ytCandidate.allow) {
-          stats.rejected++;
-          addLog('reject', source, url, { reason: ytCandidate.reason });
-          return false;
-        }
-      }
-    }
-
-    // Kiểm tra candidate qua Instagram & Facebook
-    const isInstagramVideo = socialModules.ig && socialModules.ig.isCandidate(url, host, source, extra);
-    const isFacebookVideo = socialModules.fb && socialModules.fb.isCandidate(url, host, source);
-
-    if (/^scontent/i.test(host) && !FILE_RE.test(url) && !isInstagramVideo && !isFacebookVideo) {
+    if (/^scontent/i.test(host) && !FILE_RE.test(url) && !isFromSocialPlugin && !/\/(?:o1\/v\/|v\/t[0-9])/i.test(url)) {
       addLog('reject', source, url, { reason: 'Host scontent không có bằng chứng là video' });
       return false;
     }
 
-    const isIg = isInstagramVideo || (typeof source === 'string' && source.includes('ig'));
-    const looksMedia = FILE_RE.test(url) || MEDIA_HOST_RE.test(host) || source === 'fb-json' || source === 'ig-json'
+    const hasMediaExt = FILE_RE.test(url);
+    const isRecognizedPath = /\/(?:o1\/v\/|v\/t[0-9])/i.test(url);
+    const looksMedia = hasMediaExt || isRecognizedPath || source === 'fb-json' || source === 'ig-json'
       || (typeof source === 'string' && (source.startsWith('inject:fb-') || source.startsWith('inject:ig-')))
-      || isIg || isFromYtParser;
+      || isFromSocialPlugin;
 
     if (!looksMedia) {
       stats.rejected++;
-      addLog('reject', source, url, { reason: 'Không có đuôi video và không nằm trong Media Host list' });
+      addLog('reject', source, url, { reason: 'Không có đuôi video và không có định dạng đường dẫn video hợp lệ' });
       return false;
     }
 
-    const defaultLabel = isIg ? 'Instagram Video' : null;
-    const finalLabel = (extra && extra.label) || defaultLabel;
+    const finalLabel = (extra && extra.label) || decision.label || null;
 
-    const isCurrent = !!(extra && extra.isCurrent) || !!fbProcess.isCurrent;
+    let moduleProcessIsCurrent = false;
+    for (const module of Object.values(socialModules)) {
+      if (typeof module.onProcessUrl === 'function') {
+        try {
+          const res = module.onProcessUrl(url, source, extra, items, add);
+          if (res && res.isCurrent) moduleProcessIsCurrent = true;
+        } catch { /* ignore */ }
+      }
+    }
+
+    const isCurrent = !!(extra && extra.isCurrent) || decision.isCurrent || moduleProcessIsCurrent;
     const existing = items.get(url);
     if (existing) {
       if (!existing.sources.includes(source)) existing.sources.push(source);
       if (finalLabel && !existing.label) existing.label = finalLabel;
+      if (extra && extra.code && !existing.code) existing.code = extra.code;
       if (isCurrent) {
         for (const it of items.values()) it.isCurrent = false;
         existing.isCurrent = true;
@@ -207,14 +242,14 @@
 
     // Phân loại kind
     let kind = null;
-    if (socialModules.ytb && typeof socialModules.ytb.classify === 'function') {
-      kind = socialModules.ytb.classify(url, source);
-    }
-    if (!kind) {
-      kind = classify(url);
-    }
+    kind = decision.kind || (window.__VG_MEDIA_ENGINE__ && window.__VG_MEDIA_ENGINE__.classify(url,
+      typeof source === 'string' && source.startsWith('inject:yt-') && source !== 'inject:yt-progressive'
+        ? 'yt-adaptive' : null)) || classify(url);
 
-    if (kind !== 'file' && kind !== 'yt-adaptive') {
+    const downloadable = window.__VG_MEDIA_ENGINE__
+      ? window.__VG_MEDIA_ENGINE__.isDownloadable(kind)
+      : kind === 'file' || kind === 'yt-adaptive';
+    if (!downloadable) {
       stats.rejected++;
       addLog('reject', source, url, { reason: `Là '${kind}' (segment/manifest), không phải video file hoàn chỉnh` });
       return false;
@@ -225,18 +260,29 @@
     }
 
     const newItem = {
+      observedUrl,
       url,
       host,
       kind,
+      type: kind,
       sources: [source],
       label: finalLabel,
       poster: (extra && extra.poster) || null,
       title: (extra && extra.title) || null,
+      code: (extra && extra.code) || null,
       isCurrent: isCurrent,
       pageUrl: (extra && extra.pageUrl) || location.href,
       pageTitle: (extra && extra.title) || document.title,
       foundAt: Date.now(),
+      sessionId: (extra && extra.sessionId) || null,
       ytMeta: (extra && extra.ytMeta) || null,
+      mimeType: (extra && extra.mimeType) || null,
+      width: (extra && extra.width) || 0,
+      height: (extra && extra.height) || 0,
+      fps: (extra && extra.fps) || 0,
+      bitrate: (extra && extra.bitrate) || 0,
+      hasAudio: extra && typeof extra.hasAudio === 'boolean' ? extra.hasAudio : null,
+      hasVideo: extra && typeof extra.hasVideo === 'boolean' ? extra.hasVideo : true,
     };
 
     items.set(url, newItem);
@@ -281,12 +327,44 @@
   window.addEventListener('message', (e) => {
     if (e.source !== window) return;
     const d = e.data;
-    if (!d || d.__videoGrabber !== true || typeof d.url !== 'string') return;
+    if (!d || d.__videoGrabber !== true) return;
+
+    if (d.via === 'status-request') {
+      window.postMessage({
+        __videoGrabber: true,
+        via: 'status-response',
+        requestId: d.requestId,
+        status: {
+          ok: true,
+          url: location.href,
+          isTop: window.top === window,
+          localCount: items.size,
+          hasObserver: !!perfObserver,
+          hasInject: injectAlive,
+          stats: { ...stats },
+          logs: recentLogs.slice(-25),
+        },
+      }, '*');
+      return;
+    }
+
+    if (typeof d.url !== 'string') return;
 
     if (d.via === '__ping') {
       injectAlive = true;
       log.info('Đã kết nối với inject.js (MAIN world)');
       addLog('system', 'inject', 'MAIN world script đã kết nối', {});
+      return;
+    }
+
+    if (d.via === 'fb-active') {
+      for (const module of Object.values(socialModules)) {
+        if (typeof module.onActiveContext === 'function') {
+          try { module.onActiveContext(d.meta || {}); }
+          catch { /* ignore plugin context errors */ }
+        }
+      }
+      addLog('system', 'fb', 'ACTIVE VIDEO context updated', d.meta || {});
       return;
     }
 
@@ -384,15 +462,20 @@
   // ------------------------------------ theo dõi video đang phát / lướt tới
   function extractPostInfo(el) {
     if (!el) return { title: null, pageUrl: null, poster: null };
+    const isSingleVideoUrl = /(?:\/reel\/|\/reels\/|\/watch|\/videos\/|\/posts\/|\/p\/)/i.test(location.pathname)
+      || /[?&]v=[0-9]+/i.test(location.search);
+
     const container =
+      el.closest('div[style*="scroll-snap-align"]') ||
+      el.closest('div[data-video-id]') ||
       el.closest('article') ||
       el.closest('[role="dialog"]') ||
-      el.closest('[data-pagelet]') ||
       el.closest('div[role="feed"] > div') ||
+      el.closest('div[data-visualcompletion="ignore-dynamic-attribute"]') ||
       el.parentElement;
 
     let title = null;
-    let pageUrl = null;
+    let pageUrl = isSingleVideoUrl ? location.href : null;
     const poster = el.poster || null;
 
     if (container) {
@@ -400,18 +483,28 @@
       if (textEl && textEl.textContent.trim().length > 3) {
         title = textEl.textContent.trim().slice(0, 100);
       }
-      const linkEl = container.querySelector('a[href*="/reel/"], a[href*="/reels/"], a[href*="/p/"], a[href*="/videos/"]');
-      if (linkEl && linkEl.href) {
-        pageUrl = linkEl.href;
+      if (!pageUrl) {
+        const linkEl = container.querySelector(
+          'a[href*="/reel/"], a[href*="/reels/"], a[href*="/p/"], a[href*="/videos/"], a[href*="/watch"], a[href*="?v="], a[href*="/posts/"], a[href*="story_fbid="], a[href*="/share/v/"], a[href*="/share/r/"]'
+        );
+        if (linkEl && linkEl.href) {
+          pageUrl = linkEl.href;
+        }
       }
     }
-    return { title, pageUrl, poster };
+    return { title, pageUrl: pageUrl || location.href, poster };
   }
 
   function markVideoActive(videoEl, trigger) {
     if (!videoEl) return;
     const src = videoEl.currentSrc || videoEl.src;
     const info = extractPostInfo(videoEl);
+    const activeContext = { videoEl, pageUrl: info.pageUrl || location.href, title: info.title, poster: info.poster };
+    for (const module of Object.values(socialModules)) {
+      if (typeof module.onVideoPlay !== 'function') continue;
+      try { module.onVideoPlay(videoEl, activeContext); }
+      catch { /* ignore plugin context errors */ }
+    }
 
     if (src && /^https?:\/\//i.test(src) && !src.startsWith('blob:')) {
       log.info(`🎯 [${trigger}] Bắt video direct src:`, src.slice(0, 80));
@@ -480,7 +573,7 @@
   window.addEventListener('scroll', () => {
     clearTimeout(scrollCheckTimer);
     scrollCheckTimer = setTimeout(checkViewportReels, 350);
-  }, { passive: true });
+  }, { passive: true, capture: true });
 
   function scanAll() {
     try { scanDom(); } catch { /* ignore */ }

@@ -21,6 +21,7 @@
     name: 'ytb',
 
     isPage: isYouTubePage,
+    matchPage: isYouTubePage,
 
     isCandidate(url, host, source) {
       const isFromYtParser = typeof source === 'string' && source.startsWith('inject:yt-');

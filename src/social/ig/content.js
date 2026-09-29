@@ -106,6 +106,7 @@
     name: 'ig',
 
     isPage: isInstagramPage,
+    matchPage: isInstagramPage,
 
     isCandidate(url, host, source, extra) {
       const isIgPage = isInstagramPage();

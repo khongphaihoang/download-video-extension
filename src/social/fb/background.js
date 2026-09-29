@@ -14,6 +14,8 @@ export function facebookMediaKey(item) {
   }
 }
 
+export const mediaKey = facebookMediaKey;
+
 export function isIgnored(item) {
   try {
     const page = new URL(item.pageUrl);
@@ -27,6 +29,8 @@ export function isIgnored(item) {
   return false;
 }
 
+export const ignoreItem = isIgnored;
+
 export function updateExisting(existing, item, key) {
   if (existing.url !== item.url && key.startsWith('fbcdn:')) {
     existing.url = item.url;
@@ -35,3 +39,5 @@ export function updateExisting(existing, item, key) {
   }
   return false;
 }
+
+export const updateItem = updateExisting;

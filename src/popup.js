@@ -9,6 +9,8 @@ import * as fb from './social/fb/popup.js';
 import * as ig from './social/ig/popup.js';
 import * as ytb from './social/ytb/popup.js';
 
+const socialModules = [ytb, ig, fb];
+
 const $ = (sel) => document.querySelector(sel);
 
 const el = {
@@ -176,7 +178,11 @@ async function load() {
   currentTabUrl = tab.url || '';
 
   // Phát hiện YouTube để hiển thị cảnh báo
-  const isYouTube = ytb.isYouTubeTab(currentTabUrl);
+  const isYouTube = socialModules.some((module) =>
+    typeof module.matchTab === 'function'
+      ? module.matchTab(currentTabUrl)
+      : typeof module.isYouTubeTab === 'function' && module.isYouTubeTab(currentTabUrl)
+  );
   if (el.ytNotice) {
     el.ytNotice.classList.toggle('hidden', !isYouTube);
   }
@@ -184,8 +190,20 @@ async function load() {
   const key = 'tab:' + tabId;
   const store = await chrome.storage.session.get(key);
   const isFbTab = fb.isFacebookTab(currentTabUrl);
+  const currentTabCode = fb.matchVideoCode ? fb.matchVideoCode(currentTabUrl) : null;
 
   const rawList = (store[key] || []).sort((a, b) => {
+    // 0. Khớp chính xác video ID của trang đang mở
+    if (currentTabCode) {
+      const aMatch = (a.code && a.code === currentTabCode)
+        || (a.pageUrl && a.pageUrl.includes(currentTabCode))
+        || (a.url && a.url.includes(currentTabCode));
+      const bMatch = (b.code && b.code === currentTabCode)
+        || (b.pageUrl && b.pageUrl.includes(currentTabCode))
+        || (b.url && b.url.includes(currentTabCode));
+      if (aMatch && !bMatch) return -1;
+      if (!aMatch && bMatch) return 1;
+    }
     // 1. Video đang phát / vừa lướt tới LUÔN xếp đầu tiên
     if (a.isCurrent && !b.isCurrent) return -1;
     if (!a.isCurrent && b.isCurrent) return 1;
@@ -203,9 +221,41 @@ async function load() {
   await runDiag();
 }
 
+function isSingleVideoPage(url) {
+  if (!url) return false;
+  return /\/(?:reel|reels|watch|videos|p)\//i.test(url)
+    || /[?&]v=[0-9]+/i.test(url)
+    || /youtube\.com\/watch/i.test(url)
+    || /instagram\.com\/(?:p|reel|reels)\//i.test(url);
+}
+
 function visibleItems() {
   if (kindFilter === 'current') {
-    return allItems.filter((i) => i.isCurrent);
+    const currentTabCode = fb.matchVideoCode ? fb.matchVideoCode(currentTabUrl) : null;
+    if (currentTabCode) {
+      const matchedByCode = allItems.filter((i) =>
+        (i.code && i.code === currentTabCode) ||
+        (i.pageUrl && i.pageUrl.includes(currentTabCode)) ||
+        (i.url && i.url.includes(currentTabCode))
+      );
+      if (matchedByCode.length > 0) {
+        const currentInMatched = matchedByCode.filter((i) => i.isCurrent);
+        return currentInMatched.length > 0 ? currentInMatched : [matchedByCode[0]];
+      }
+    }
+
+    const current = allItems.filter((i) => i.isCurrent);
+    if (current.length > 0) return current;
+
+    if (isSingleVideoPage(currentTabUrl) && allItems.length > 0) {
+      const cleanTabUrl = currentTabUrl.split('?')[0];
+      const matched = allItems.filter((i) => i.pageUrl && i.pageUrl.split('?')[0] === cleanTabUrl);
+      if (matched.length > 0) return matched;
+      return [allItems[0]];
+    }
+
+    if (allItems.length === 1) return allItems;
+    return [];
   }
   return kindFilter === 'all' ? allItems : allItems.filter((i) => i.kind === kindFilter);
 }
@@ -252,22 +302,10 @@ function getFilename(item, info) {
 function parseItemInfo(item) {
   const isFbTab = fb.isFacebookTab(currentTabUrl);
 
-  // 1. YouTube
-  const ytInfo = ytb.parseItemInfo(item);
-  if (ytInfo) {
-    return { ...ytInfo, filename: getFilename(item, ytInfo) };
-  }
-
-  // 2. Instagram
-  const igInfo = ig.parseItemInfo(item, isFbTab);
-  if (igInfo) {
-    return { ...igInfo, filename: getFilename(item, igInfo) };
-  }
-
-  // 3. Facebook
-  const fbInfo = fb.parseItemInfo(item);
-  if (fbInfo) {
-    return { ...fbInfo, filename: getFilename(item, fbInfo) };
+  for (const module of socialModules) {
+    if (typeof module.parseItemInfo !== 'function') continue;
+    const info = module.parseItemInfo(item, isFbTab);
+    if (info) return { ...info, filename: getFilename(item, info) };
   }
 
   // 4. Mặc định

@@ -38,3 +38,5 @@ export async function probeYouTubeUrl(tabId, url, probeMediaUrlFn, log) {
 
   return { shouldDownload: true };
 }
+
+export const probeDownload = probeYouTubeUrl;

@@ -12,6 +12,8 @@ import * as fb from './social/fb/background.js';
 import * as ig from './social/ig/background.js';
 import * as ytb from './social/ytb/background.js';
 
+const socialModules = [ytb, ig, fb];
+
 // Logger tiện ích cho background script
 const log = {
   info: (msg, ...args) =>
@@ -54,7 +56,12 @@ async function writeItems(tabId, list) {
 }
 
 function getItemKey(item) {
-  return fb.facebookMediaKey(item);
+  for (const module of socialModules) {
+    if (typeof module.mediaKey !== 'function') continue;
+    const key = module.mediaKey(item);
+    if (key && key !== item.url) return key;
+  }
+  return item.url;
 }
 
 async function addItems(tabId, incoming) {
@@ -65,13 +72,16 @@ async function addItems(tabId, incoming) {
   for (const item of incoming) {
     if (!item || !item.url) continue;
 
-    // Lọc bỏ segment stream byte range của Facebook
-    if (fb.isIgnored(item)) continue;
+    if (socialModules.some((module) => typeof module.ignoreItem === 'function' && module.ignoreItem(item))) continue;
 
     const key = getItemKey(item);
     const existing = byKey.get(key);
     if (existing) {
-      if (fb.updateExisting(existing, item, key)) {
+      let updated = false;
+      for (const module of socialModules) {
+        if (typeof module.updateItem === 'function' && module.updateItem(existing, item, key)) updated = true;
+      }
+      if (updated) {
         changed = true;
       }
       if (Array.isArray(item.sources)) {
@@ -114,13 +124,10 @@ function updateBadge(tabId, count) {
 /** Rút tên file an toàn từ URL. Sử dụng social modules tương ứng. */
 function filenameFor(url, index, meta) {
   let base = null;
-
-  // 1. YouTube
-  base = ytb.formatFilename(url, index, meta);
-
-  // 2. Instagram
-  if (!base) {
-    base = ig.formatFilename(url, index, meta);
+  for (const module of socialModules) {
+    if (typeof module.formatFilename !== 'function') continue;
+    base = module.formatFilename(url, index, meta);
+    if (base) break;
   }
 
   // 3. Fallback URL thông thường
@@ -154,8 +161,12 @@ async function downloadOne(item, index, total, tabId) {
   const meta = typeof item === 'object' ? item : null;
   const filename = filenameFor(url, total > 1 ? index : null, meta);
 
-  // Kiểm tra probe cho YouTube (tránh 403 lưu file .txt rác)
-  const probeCheck = await ytb.probeYouTubeUrl(tabId, url, probeMediaUrl, log);
+  let probeCheck = { shouldDownload: true };
+  for (const module of socialModules) {
+    if (typeof module.probeDownload !== 'function') continue;
+    probeCheck = await module.probeDownload(tabId, url, probeMediaUrl, log);
+    if (probeCheck && probeCheck.shouldDownload === false) break;
+  }
   if (!probeCheck.shouldDownload) {
     return { ok: false, url, error: probeCheck.error };
   }

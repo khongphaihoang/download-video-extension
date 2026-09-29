@@ -253,6 +253,13 @@
 
     isPage: isYouTubePage,
 
+    isCandidate(url, host, via) {
+      if (!/(^|\.)googlevideo\.com$/i.test(host)) return null;
+      return typeof via === 'string' && via.startsWith('yt-')
+        ? { isVideo: true }
+        : { allow: false, reason: 'googlevideo.com chỉ nhận qua YouTube parser' };
+    },
+
     isApiRequest(url) {
       return url && /\/youtubei\/v1\/player/i.test(url);
     },

@@ -6,6 +6,8 @@ export function isYouTubeTab(tabUrl) {
   return !!(tabUrl && /^https?:\/\/(www\.|m\.)?youtube\.com\//i.test(tabUrl));
 }
 
+export const matchTab = isYouTubeTab;
+
 export function isYouTubeItem(item) {
   const host = item.host || '';
   return !!(

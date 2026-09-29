@@ -12,6 +12,23 @@
     'playback_url',
   ];
 
+  const postMap = new Map();
+  const postKey = (code) => `ig:${code}`;
+
+  function recordPostVideo(code, url, extra) {
+    if (!code || typeof url !== 'string') return;
+    const cleanUrl = url
+      .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+      .replace(/\\\//g, '/')
+      .replace(/\\\\/g, '\\');
+    if (!/^https?:\/\//i.test(cleanUrl)) return;
+    const key = postKey(code);
+    const rank = (extra && extra.rank) || 0;
+    const previous = postMap.get(key);
+    if (previous && previous.rank > rank) return;
+    postMap.set(key, { code: String(code), url: cleanUrl, rank, title: (extra && extra.title) || null });
+  }
+
   function igCodeFromUrl(raw) {
     try {
       const u = new URL(raw, location.href);
@@ -28,13 +45,9 @@
     try {
       const u = new URL(url, location.href);
       const host = u.hostname;
-      if (
-        host === 'www.instagram.com' ||
-        host === 'instagram.com' ||
-        host.endsWith('.instagram.com')
-      ) {
-        return true;
-      }
+      if (!/(^|\.)instagram\.com$/i.test(host)) return false;
+      return /\/(?:graphql|api\/v1|api\/graphql|ajax)(?:\/|$)/i.test(u.pathname)
+        || /(?:graphql|video|media)/i.test(u.search);
     } catch { /* ignore */ }
     return false;
   }
@@ -82,12 +95,12 @@
             for (const version of versions) {
               if (!version || typeof version.url !== 'string') continue;
               const area = (Number(version.width) || 0) * (Number(version.height) || 0);
-              ctx.recordPostVideo('ig', code, version.url, { rank: area + 1 });
+              recordPostVideo(code, version.url, { rank: area + 1 });
             }
           }
           for (const key of ['video_url', 'playback_url']) {
             if (typeof record[key] === 'string') {
-              ctx.recordPostVideo('ig', code, record[key], { rank: 1 });
+              recordPostVideo(code, record[key], { rank: 1 });
             }
           }
         });
@@ -95,7 +108,7 @@
 
       const code = igCodeFromUrl(location.href);
       if (code) {
-        const entry = ctx.postMap.get(ctx.postKey('ig', code));
+        const entry = postMap.get(postKey(code));
         if (entry) {
           ctx.report(entry.url, 'ig-single-post', { isCurrent: true, label: 'Đang phát' });
         }
@@ -132,10 +145,30 @@
       return null;
     },
 
+    onVideoPlay(videoEl, ctx) {
+      if (!videoEl) return false;
+      const keys = Object.keys(videoEl);
+      const fiberKey = keys.find((key) => key.startsWith('__reactFiber$') || key.startsWith('__reactInternalInstance$'));
+      let fiber = fiberKey && videoEl[fiberKey];
+      for (let depth = 0; fiber && depth < 35; depth++, fiber = fiber.return) {
+        const result = fiber.memoizedProps && this.extractFiberProps(fiber.memoizedProps);
+        if (result && result.url) {
+          ctx.report(result.url, 'react-fiber', {
+            isCurrent: true,
+            label: 'Đang phát',
+            title: result.title || null,
+            code: result.code || null,
+          });
+          return true;
+        }
+      }
+      return this.handleActivePlay(location.href, ctx);
+    },
+
     handleActivePlay(href, ctx) {
       const igCode = igCodeFromUrl(href);
       if (igCode) {
-        const entry = ctx.postMap.get(ctx.postKey('ig', igCode));
+        const entry = postMap.get(postKey(igCode));
         if (entry && entry.url) {
           ctx.log.info(`🎯 [ActivePlay] Khớp chính xác Instagram Reel [${igCode}] từ postMap:`, entry.url.slice(0, 80));
           ctx.report(entry.url, 'shortcode-match', { isCurrent: true, label: 'Đang phát', code: igCode });
@@ -148,7 +181,7 @@
     resolveVideo(code, pageUrl, title, ctx) {
       const isIg = pageUrl && igCodeFromUrl(pageUrl) === code;
       if (!isIg && !/^[A-Za-z0-9_-]{5,35}$/.test(code)) return false;
-      const entry = ctx.postMap.get(ctx.postKey('ig', code));
+      const entry = postMap.get(postKey(code));
       if (entry) {
         ctx.log.info(`🎯 [resolveVideo] Khớp postMap cho Instagram code [${code}]:`, entry.url.slice(0, 80));
         ctx.report(entry.url, 'shortcode-resolved', {
