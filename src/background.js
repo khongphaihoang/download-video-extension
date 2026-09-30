@@ -11,8 +11,9 @@
 import * as fb from './social/fb/background.js';
 import * as ig from './social/ig/background.js';
 import * as ytb from './social/ytb/background.js';
+import * as tiktok from './social/tiktok/background.js';
 
-const socialModules = [ytb, ig, fb];
+const socialModules = [ytb, ig, fb, tiktok];
 
 // Logger tiện ích cho background script
 const log = {
@@ -171,6 +172,13 @@ async function downloadOne(item, index, total, tabId) {
     return { ok: false, url, error: probeCheck.error };
   }
 
+  // Cho phép module xử lý download đặc thù (VD: TikTok cần tải qua tab session để tránh bị CDN Akamai trả về 403 HTML)
+  for (const module of socialModules) {
+    if (typeof module.handleDownload !== 'function') continue;
+    const handled = await module.handleDownload(item, filename, tabId, log);
+    if (handled) return handled;
+  }
+
   try {
     log.info(`Đang tải (${index + 1}/${total}): ${filename}`, url);
     const id = await chrome.downloads.download({
@@ -183,7 +191,24 @@ async function downloadOne(item, index, total, tabId) {
     return { ok: true, id, url };
   } catch (err) {
     const errorMsg = String((err && err.message) || err);
-    log.err(`Tải thất bại (${filename}): ${errorMsg}`, url);
+    log.warn(`chrome.downloads thất bại (${filename}): ${errorMsg}. Thử fallback tải qua tab...`, url);
+
+    if (tabId != null) {
+      try {
+        const fallbackRes = await chrome.tabs.sendMessage(tabId, {
+          type: 'content:download-blob',
+          url,
+          filename,
+        });
+        if (fallbackRes && fallbackRes.ok) {
+          log.info(`Tải fallback thành công qua tab cho: ${filename}`);
+          return { ok: true, id: 'tab-blob', url };
+        }
+      } catch (fbErr) {
+        log.err(`Tải fallback qua tab cũng thất bại:`, fbErr);
+      }
+    }
+
     return { ok: false, url, error: errorMsg };
   }
 }

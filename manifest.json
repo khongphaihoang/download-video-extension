@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Video Grabber",
-  "version": "0.3.17",
+  "version": "0.3.22",
   "description": "Bắt mọi link video từ trang web đang mở, kể cả video trong group private trên Facebook.",
   "permissions": [
     "activeTab",
@@ -31,6 +31,7 @@
         "src/social/fb/inject.js",
         "src/social/ig/inject.js",
         "src/social/ytb/inject.js",
+        "src/social/tiktok/inject.js",
         "src/inject.js"
       ],
       "run_at": "document_start",
@@ -47,6 +48,7 @@
         "src/social/fb/content.js",
         "src/social/ig/content.js",
         "src/social/ytb/content.js",
+        "src/social/tiktok/content.js",
         "src/content.js"
       ],
       "run_at": "document_start",

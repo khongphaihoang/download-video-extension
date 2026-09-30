@@ -85,5 +85,143 @@
       "regexFilter": "^https?://instagram\\.[^/]*\\.fbcdn\\.net/.*",
       "resourceTypes": ["media", "other", "object", "xmlhttprequest"]
     }
+  },
+  {
+    "id": 5,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {
+          "header": "Referer",
+          "operation": "set",
+          "value": "https://www.tiktok.com/"
+        },
+        {
+          "header": "Origin",
+          "operation": "set",
+          "value": "https://www.tiktok.com"
+        }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||tiktokcdn.com",
+      "resourceTypes": ["main_frame", "sub_frame", "media", "other", "object", "xmlhttprequest"]
+    }
+  },
+  {
+    "id": 6,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {
+          "header": "Referer",
+          "operation": "set",
+          "value": "https://www.tiktok.com/"
+        },
+        {
+          "header": "Origin",
+          "operation": "set",
+          "value": "https://www.tiktok.com"
+        }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||tiktokcdn-us.com",
+      "resourceTypes": ["main_frame", "sub_frame", "media", "other", "object", "xmlhttprequest"]
+    }
+  },
+  {
+    "id": 7,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {
+          "header": "Referer",
+          "operation": "set",
+          "value": "https://www.tiktok.com/"
+        },
+        {
+          "header": "Origin",
+          "operation": "set",
+          "value": "https://www.tiktok.com"
+        }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||byteoversea.com",
+      "resourceTypes": ["main_frame", "sub_frame", "media", "other", "object", "xmlhttprequest"]
+    }
+  },
+  {
+    "id": 8,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {
+          "header": "Referer",
+          "operation": "set",
+          "value": "https://www.tiktok.com/"
+        },
+        {
+          "header": "Origin",
+          "operation": "set",
+          "value": "https://www.tiktok.com"
+        }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||ibytedtos.com",
+      "resourceTypes": ["main_frame", "sub_frame", "media", "other", "object", "xmlhttprequest"]
+    }
+  },
+  {
+    "id": 9,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {
+          "header": "Referer",
+          "operation": "set",
+          "value": "https://www.tiktok.com/"
+        },
+        {
+          "header": "Origin",
+          "operation": "set",
+          "value": "https://www.tiktok.com"
+        }
+      ]
+    },
+    "condition": {
+      "regexFilter": "^https?://([^/]+\\.)?tiktok\\.com/(video/tos|video/mime|.*/mp4/|play/).*",
+      "resourceTypes": ["main_frame", "sub_frame", "media", "other", "object", "xmlhttprequest"]
+    }
+  },
+  {
+    "id": 10,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {
+          "header": "Referer",
+          "operation": "set",
+          "value": "https://www.tiktok.com/"
+        },
+        {
+          "header": "Origin",
+          "operation": "set",
+          "value": "https://www.tiktok.com"
+        }
+      ]
+    },
+    "condition": {
+      "regexFilter": "^https?://(v[0-9]+[^/]*|webapp[^/]*)\\.tiktok\\.com/.*",
+      "resourceTypes": ["main_frame", "sub_frame", "media", "other", "object", "xmlhttprequest"]
+    }
   }
 ]

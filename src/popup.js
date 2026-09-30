@@ -8,8 +8,9 @@
 import * as fb from './social/fb/popup.js';
 import * as ig from './social/ig/popup.js';
 import * as ytb from './social/ytb/popup.js';
+import * as tiktok from './social/tiktok/popup.js';
 
-const socialModules = [ytb, ig, fb];
+const socialModules = [ytb, ig, fb, tiktok];
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -190,7 +191,10 @@ async function load() {
   const key = 'tab:' + tabId;
   const store = await chrome.storage.session.get(key);
   const isFbTab = fb.isFacebookTab(currentTabUrl);
-  const currentTabCode = fb.matchVideoCode ? fb.matchVideoCode(currentTabUrl) : null;
+  const isTtTab = tiktok.isTikTokTab(currentTabUrl);
+  const currentTabCode = (fb.matchVideoCode && fb.matchVideoCode(currentTabUrl))
+    || (tiktok.matchVideoCode && tiktok.matchVideoCode(currentTabUrl))
+    || null;
 
   const rawList = (store[key] || []).sort((a, b) => {
     // 0. Khớp chính xác video ID của trang đang mở
@@ -215,7 +219,9 @@ async function load() {
   });
 
   // Lọc và khử trùng theo nền tảng
-  allItems = fb.filterAndDedupe(rawList, isFbTab);
+  let filtered = fb.filterAndDedupe(rawList, isFbTab);
+  filtered = tiktok.filterAndDedupe(filtered, isTtTab);
+  allItems = filtered;
 
   render();
   await runDiag();
@@ -226,12 +232,17 @@ function isSingleVideoPage(url) {
   return /\/(?:reel|reels|watch|videos|p)\//i.test(url)
     || /[?&]v=[0-9]+/i.test(url)
     || /youtube\.com\/watch/i.test(url)
-    || /instagram\.com\/(?:p|reel|reels)\//i.test(url);
+    || /instagram\.com\/(?:p|reel|reels)\//i.test(url)
+    || /tiktok\.com\/.*\/video\//i.test(url)
+    || /tiktok\.com\/.*\/v\//i.test(url)
+    || /tiktok\.com\/.*\/photo\//i.test(url);
 }
 
 function visibleItems() {
   if (kindFilter === 'current') {
-    const currentTabCode = fb.matchVideoCode ? fb.matchVideoCode(currentTabUrl) : null;
+    const currentTabCode = (fb.matchVideoCode && fb.matchVideoCode(currentTabUrl))
+      || (tiktok.matchVideoCode && tiktok.matchVideoCode(currentTabUrl))
+      || null;
     if (currentTabCode) {
       const matchedByCode = allItems.filter((i) =>
         (i.code && i.code === currentTabCode) ||
@@ -290,11 +301,19 @@ function getFilename(item, info) {
   if (info.shortcode) {
     return `instagram_${info.shortcode}.mp4`;
   }
+  if (info.platform === 'tiktok') {
+    const code = info.code || (item.pageUrl && item.pageUrl.match(/\/(?:video|v|photo|share\/video)\/([0-9]{15,25})/i)?.[1]);
+    let title = info.title || item.title || item.pageTitle || 'tiktok_video';
+    title = title.replace(/\s*\|\s*TikTok.*$/i, '').trim();
+    title = title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim().slice(0, 60);
+    return code ? `tiktok_${title}_${code}.mp4` : `tiktok_${title}.mp4`;
+  }
   try {
     const u = new URL(item.url);
     const last = u.pathname.split('/').filter(Boolean).pop() || '';
     if (last && /\.[a-z0-9]{2,5}$/i.test(last)) return decodeURIComponent(last);
     if (info.platform === 'instagram') return 'instagram_video.mp4';
+    if (info.platform === 'tiktok') return 'tiktok_video.mp4';
   } catch { /* ignore */ }
   return 'video.mp4';
 }
@@ -464,6 +483,8 @@ async function runDownload(items, button) {
     tabId,
     items: items.map((i) => ({
       url: i.url,
+      code: i.code || null,
+      title: i.title || null,
       ytMeta: i.ytMeta || null,
       pageUrl: i.pageUrl || null,
       pageTitle: i.pageTitle || null,
@@ -483,21 +504,58 @@ async function runDownload(items, button) {
     return;
   }
 
-  setStatus(`Đã gửi ${ids.length} file, đang kiểm tra…`);
+  if (ids.every((id) => id === 'tab-blob')) {
+    setStatus('Đã tải video thành công vào thư mục Downloads!', 'ok');
+    return;
+  }
+
+  setStatus(`Đang xử lý ${ids.length} file…`);
 
   setTimeout(async () => {
     try {
-      const found = await chrome.downloads.search({ id: ids });
-      const bad = found.filter((f) => f.state === 'interrupted');
-      if (bad.length) {
-        setStatus(
-          `${bad.length}/${ids.length} thất bại: ${bad[0].error || 'bị chặn'}. ` +
-            'URL có thể đã hết hạn — thử Quét sâu lại.',
-          'err'
-        );
-      } else {
-        setStatus(`Đang tải ${ids.length} file vào thư mục Downloads`, 'ok');
+      const numericIds = ids.filter((id) => typeof id === 'number');
+      if (numericIds.length > 0) {
+        const found = await chrome.downloads.search({ id: numericIds });
+        const bad = found.filter((f) => {
+          if (f.state === 'interrupted') return true;
+          // Phát hiện file tải về thực chất là HTML báo lỗi (403 Forbidden / Access Denied)
+          if (f.state === 'complete' && f.mime && f.mime.includes('text/html')) return true;
+          if (f.state === 'complete' && f.fileSize > 0 && f.fileSize < 3000 && f.filename && !f.filename.endsWith('.html')) return true;
+          return false;
+        });
+        if (bad.length) {
+          // Xóa file rác HTML do máy chủ trả về nếu có
+          for (const b of bad) {
+            if (b.state === 'complete') {
+              chrome.downloads.removeFile(b.id).catch(() => {});
+              chrome.downloads.erase({ id: b.id }).catch(() => {});
+            }
+          }
+          setStatus(`Tải trực tiếp bị chặn (${bad[0].error || 'máy chủ trả về file HTML'}). Đang thử tải qua trang web…`);
+          let anyFbOk = false;
+          for (const item of items) {
+            try {
+              const fbRes = await chrome.tabs.sendMessage(tabId, {
+                type: 'content:download-blob',
+                url: item.url,
+                filename: getFilename(item, parseItemInfo(item) || {}),
+              });
+              if (fbRes && fbRes.ok) anyFbOk = true;
+            } catch { /* ignore */ }
+          }
+          if (anyFbOk) {
+            setStatus('Đã tải video thành công vào thư mục Downloads!', 'ok');
+          } else {
+            setStatus(
+              `${bad.length}/${ids.length} thất bại: máy chủ từ chối tải trực tiếp. ` +
+                'URL có thể đã hết hạn — thử Quét sâu lại.',
+              'err'
+            );
+          }
+          return;
+        }
       }
+      setStatus(`Đang tải ${ids.length} file vào thư mục Downloads`, 'ok');
     } catch {
       setStatus(`Đã gửi ${ids.length} file`, 'ok');
     }
