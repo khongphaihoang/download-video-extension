@@ -214,8 +214,15 @@ async function load() {
     return (KIND_ORDER[a.kind] ?? 9) - (KIND_ORDER[b.kind] ?? 9);
   });
 
-  // Lọc và khử trùng theo nền tảng
-  allItems = fb.filterAndDedupe(rawList, isFbTab);
+  // Lọc và khử trùng theo nền tảng (áp dụng toàn hệ thống)
+  let list = rawList;
+  if (typeof ytb.filterAndDedupe === 'function') {
+    list = ytb.filterAndDedupe(list, isYouTube);
+  }
+  if (typeof fb.filterAndDedupe === 'function') {
+    list = fb.filterAndDedupe(list, isFbTab);
+  }
+  allItems = list;
 
   render();
   await runDiag();
@@ -290,32 +297,159 @@ function getFilename(item, info) {
   if (info.shortcode) {
     return `instagram_${info.shortcode}.mp4`;
   }
+  if (info.platform === 'facebook' && info.videoCode) {
+    return `facebook_${info.videoCode}.mp4`;
+  }
   try {
     const u = new URL(item.url);
     const last = u.pathname.split('/').filter(Boolean).pop() || '';
     if (last && /\.[a-z0-9]{2,5}$/i.test(last)) return decodeURIComponent(last);
     if (info.platform === 'instagram') return 'instagram_video.mp4';
+    if (info.platform === 'facebook') return 'facebook_video.mp4';
   } catch { /* ignore */ }
   return 'video.mp4';
 }
 
+export function detectQuality(item) {
+  if (!item) return 'HD MP4';
+
+  // 1. YouTube metadata
+  if (item.ytMeta) {
+    if (item.ytMeta.isAudio) return 'Audio (MP3/M4A)';
+    if (item.ytMeta.quality) {
+      let q = item.ytMeta.quality;
+      if (/^[0-9]+$/.test(q)) q += 'p';
+      if (item.ytMeta.isLive) q += ' • Live';
+      return q;
+    }
+    if (item.ytMeta.isLive) return 'Live Stream';
+  }
+
+  const url = item.url || '';
+  const label = (item.label || '').toLowerCase();
+
+  // 2. Kind HLS / DASH
+  if (item.kind === 'hls' || /\.m3u8(?:\?|#|$)/i.test(url)) return 'HLS Stream';
+  if (item.kind === 'dash' || /\.mpd(?:\?|#|$)/i.test(url)) return 'DASH Stream';
+
+  // 3. Facebook URL params & efg
+  try {
+    const u = new URL(url);
+    const tag = (u.searchParams.get('tag') || '').toLowerCase();
+    const tagMatch = tag.match(/([0-9]{3,4})p/);
+    if (tagMatch) {
+      const p = Number(tagMatch[1]);
+      return p >= 720 ? `HD ${p}p` : `SD ${p}p`;
+    }
+
+    const efg = u.searchParams.get('efg');
+    if (efg) {
+      const decoded = atob(efg.replace(/_/g, '/').replace(/-/g, '+'));
+      const parsed = JSON.parse(decoded);
+      const vtag = String(parsed.vencode_tag || '').toLowerCase();
+      const vMatch = vtag.match(/(?:c[0-9]+\.)?([0-9]{3,4})/i) || vtag.match(/([0-9]{3,4})p/i);
+      if (vMatch) {
+        const p = Number(vMatch[1]);
+        return p >= 720 ? `HD ${p}p` : `SD ${p}p`;
+      }
+      if (vtag.includes('1080')) return 'Full HD 1080p';
+      if (vtag.includes('720') || vtag.includes('hd')) return 'HD 720p';
+      if (vtag.includes('sd') || vtag.includes('360')) return 'SD 360p';
+    }
+  } catch { /* ignore */ }
+
+  // 4. Pattern trong URL / tên file
+  const pMatch = url.match(/(?:_|-|\/|\.)(1080|720|480|360|240|144)p?(?:_|-|\.|$)/i);
+  if (pMatch) {
+    const p = Number(pMatch[1]);
+    return p >= 720 ? `HD ${p}p` : `SD ${p}p`;
+  }
+
+  // 5. Height / Width
+  const h = Number(item.height) || 0;
+  if (h >= 1080) return `Full HD ${h}p`;
+  if (h >= 720) return `HD ${h}p`;
+  if (h >= 480) return `SD ${h}p`;
+  if (h > 0) return `SD ${h}p`;
+
+  // 6. Label keyword
+  if (label.includes('1080')) return 'Full HD 1080p';
+  if (label.includes('720') || label.includes('hd')) return 'HD';
+  if (label.includes('sd') || label.includes('360')) return 'SD';
+
+  // 7. Định dạng mimeType / extension
+  if (item.mimeType) {
+    if (item.mimeType.includes('audio')) return 'Audio';
+    if (item.mimeType.includes('webm')) return 'WebM Video';
+    if (item.mimeType.includes('mp4')) return 'HD MP4';
+  }
+
+  if (/\.webm(?:\?|#|$)/i.test(url)) return 'WebM Video';
+  if (/\.mkv(?:\?|#|$)/i.test(url)) return 'MKV Video';
+
+  return 'HD MP4';
+}
+
 function parseItemInfo(item) {
   const isFbTab = fb.isFacebookTab(currentTabUrl);
+  let info = null;
 
   for (const module of socialModules) {
     if (typeof module.parseItemInfo !== 'function') continue;
-    const info = module.parseItemInfo(item, isFbTab);
-    if (info) return { ...info, filename: getFilename(item, info) };
+    info = module.parseItemInfo(item, isFbTab);
+    if (info) break;
   }
 
-  // 4. Mặc định
-  const defaultInfo = {
-    platform: 'generic',
-    platformName: 'Video File',
-    title: item.pageTitle || 'Video',
-    quality: 'MP4',
-  };
-  return { ...defaultInfo, filename: getFilename(item, defaultInfo) };
+  if (!info) {
+    info = {
+      platform: 'generic',
+      platformName: 'Video File',
+      title: item.pageTitle || 'Video',
+      quality: detectQuality(item),
+    };
+  }
+
+  if (!info.quality || info.quality === 'MP4' || info.quality === 'progressive_url') {
+    info.quality = detectQuality(item);
+  }
+
+  // Chuẩn hoá variants trên toàn hệ thống
+  let variants = [];
+  if (Array.isArray(info.variants) && info.variants.length > 0) {
+    variants = info.variants;
+  } else if (Array.isArray(item.variants) && item.variants.length > 0) {
+    variants = item.variants.map((v) => ({
+      url: v.url,
+      quality: v.quality || detectQuality(v),
+      score: v.score || 0,
+    }));
+  } else {
+    variants = [{
+      url: item.url,
+      quality: info.quality || detectQuality(item),
+      score: 1,
+    }];
+  }
+
+  // Khử trùng variants theo URL
+  const uniqueVariants = [];
+  const seenUrls = new Set();
+  for (const v of variants) {
+    if (!v || !v.url || seenUrls.has(v.url)) continue;
+    seenUrls.add(v.url);
+    uniqueVariants.push({
+      url: v.url,
+      quality: v.quality || detectQuality(v),
+      score: v.score || 0,
+    });
+  }
+
+  info.variants = uniqueVariants;
+  if (uniqueVariants[0] && (!info.quality || info.quality === 'MP4')) {
+    info.quality = uniqueVariants[0].quality;
+  }
+
+  return { ...info, filename: getFilename(item, info) };
 }
 
 function renderItem(item) {
@@ -355,7 +489,7 @@ function renderItem(item) {
 
   const tagQual = document.createElement('span');
   tagQual.className = 'tag-badge quality';
-  tagQual.textContent = info.quality;
+  tagQual.textContent = info.quality.replace(/\s*✓\s*$/, '');
 
   const tagHost = document.createElement('span');
   tagHost.className = 'tag-badge subtle';
@@ -376,11 +510,67 @@ function renderItem(item) {
   main.append(titleEl, tags);
   header.append(icon, main);
 
+  // Biến lưu URL và quality đang được người dùng chọn
+  let activeUrl = item.url;
+  let activeQuality = info.quality;
+
   // Dòng hiển thị tên file sẽ lưu
   const fileNameRow = document.createElement('div');
   fileNameRow.className = 'file-preview-name';
   fileNameRow.textContent = `💾 ${info.filename}`;
-  fileNameRow.title = item.url;
+  fileNameRow.title = activeUrl;
+
+  // Hộp chọn chất lượng — HIỂN THỊ TOÀN HỆ THỐNG CHO MỌI VIDEO
+  const qualitySelectorRow = document.createElement('div');
+  qualitySelectorRow.className = 'quality-selector-row';
+
+  const qLabel = document.createElement('span');
+  qLabel.className = 'quality-selector-label';
+  qLabel.textContent = 'Chất lượng:';
+
+  const qPills = document.createElement('div');
+  qPills.className = 'quality-pills';
+
+  const variants = (Array.isArray(info.variants) && info.variants.length > 0)
+    ? info.variants
+    : [{ url: activeUrl, quality: activeQuality }];
+
+  variants.forEach((v) => {
+    const isSelected = v.url === activeUrl;
+    const pill = document.createElement('button');
+    pill.className = 'quality-pill' + (isSelected ? ' active' : '');
+    pill.textContent = variants.length === 1 ? `${v.quality} ✓` : v.quality;
+    pill.title = variants.length > 1 ? `Chọn chất lượng ${v.quality}` : `Chất lượng video: ${v.quality}`;
+
+    pill.addEventListener('click', (e) => {
+      e.stopPropagation();
+      qPills.querySelectorAll('.quality-pill').forEach((p) => p.classList.remove('active'));
+      pill.classList.add('active');
+
+      activeUrl = v.url;
+      activeQuality = v.quality;
+      item.url = v.url;
+      item.label = v.quality;
+
+      tagQual.textContent = v.quality.replace(/\s*✓\s*$/, '');
+      const updatedInfo = { ...info, quality: v.quality };
+      fileNameRow.textContent = `💾 ${getFilename({ ...item, url: v.url }, updatedInfo)}`;
+      fileNameRow.title = v.url;
+
+      // Cập nhật nhãn nút Tải
+      const shortQ = v.quality.replace(/^(HD|SD)\s*/i, '').replace(/\s*✓\s*$/, '').trim();
+      dl.textContent = shortQ ? `⬇️ Tải (${shortQ})` : '⬇️ Tải';
+
+      if (isPreviewing) {
+        const video = playerWrap.querySelector('video');
+        if (video) video.src = v.url;
+      }
+    });
+
+    qPills.appendChild(pill);
+  });
+
+  qualitySelectorRow.append(qLabel, qPills);
 
   // Hộp Preview video (ẩn mặc định)
   const playerWrap = document.createElement('div');
@@ -401,7 +591,7 @@ function renderItem(item) {
     if (isPreviewing) {
       playerWrap.innerHTML = '';
       const video = document.createElement('video');
-      video.src = item.url;
+      video.src = activeUrl;
       video.controls = true;
       video.autoplay = true;
       video.muted = true;
@@ -432,21 +622,22 @@ function renderItem(item) {
 
   const dl = document.createElement('button');
   dl.className = 'btn primary dl-btn';
-  dl.textContent = '⬇️ Tải';
-  dl.addEventListener('click', () => runDownload([item], dl));
+  const initialShortQ = activeQuality.replace(/^(HD|SD)\s*/i, '').replace(/\s*✓\s*$/, '').trim();
+  dl.textContent = initialShortQ ? `⬇️ Tải (${initialShortQ})` : '⬇️ Tải';
+  dl.addEventListener('click', () => runDownload([{ ...item, url: activeUrl, label: activeQuality }], dl));
 
   const cp = document.createElement('button');
   cp.className = 'btn copy-btn';
   cp.textContent = 'Copy';
   cp.addEventListener('click', async () => {
-    await navigator.clipboard.writeText(item.url);
+    await navigator.clipboard.writeText(activeUrl);
     cp.textContent = 'Đã copy';
     setTimeout(() => (cp.textContent = 'Copy'), 1200);
   });
 
   row.append(btnPreview, dl, cp);
 
-  li.append(header, fileNameRow, playerWrap, row);
+  li.append(header, qualitySelectorRow, fileNameRow, playerWrap, row);
   return li;
 }
 

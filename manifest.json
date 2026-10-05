@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Video Grabber",
-  "version": "0.3.17",
+  "version": "0.3.28",
   "description": "Bắt mọi link video từ trang web đang mở, kể cả video trong group private trên Facebook.",
   "permissions": [
     "activeTab",

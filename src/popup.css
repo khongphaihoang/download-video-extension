@@ -259,6 +259,54 @@ h1 {
   white-space: nowrap;
 }
 
+.quality-selector-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 5px 8px;
+  background: var(--surface-2);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.quality-selector-label {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.quality-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.quality-pill {
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.quality-pill:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.quality-pill.active {
+  border-color: var(--ok);
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--ok);
+  box-shadow: 0 0 6px rgba(52, 211, 153, 0.25);
+}
+
 .file-preview-name {
   display: flex;
   align-items: center;

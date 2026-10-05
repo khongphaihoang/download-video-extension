@@ -18,17 +18,116 @@ export function isYouTubeItem(item) {
   );
 }
 
+function getYtScore(item) {
+  if (!item) return 0;
+  let score = 0;
+  const meta = item.ytMeta || {};
+  if (meta.isAudio) return 100;
+  if (item.kind === 'file') score += 5000000;
+  const h = Number(meta.height) || Number(item.height) || 0;
+  if (h > 0) score += h * 10000;
+  const qMatch = String(meta.quality || '').match(/([0-9]{3,4})p/);
+  if (qMatch) score += Number(qMatch[1]) * 10000;
+  return score;
+}
+
+export function filterAndDedupe(items, isYtTab) {
+  const byVideoId = new Map();
+  const result = [];
+
+  for (const item of items) {
+    if (!isYouTubeItem(item)) {
+      result.push(item);
+      continue;
+    }
+
+    const videoId = (item.ytMeta && item.ytMeta.videoId) || item.code || null;
+    if (!videoId) {
+      result.push(item);
+      continue;
+    }
+
+    const key = `ytb:${videoId}`;
+    const existing = byVideoId.get(key);
+
+    if (existing) {
+      if (!Array.isArray(existing.variants)) {
+        existing.variants = [{
+          url: existing.url,
+          label: existing.label,
+          ytMeta: existing.ytMeta,
+          score: getYtScore(existing),
+        }];
+      }
+
+      if (!existing.variants.some((v) => v.url === item.url)) {
+        existing.variants.push({
+          url: item.url,
+          label: item.label,
+          ytMeta: item.ytMeta,
+          score: getYtScore(item),
+        });
+      }
+
+      existing.variants.sort((a, b) => b.score - a.score);
+
+      const best = existing.variants[0];
+      if (best) {
+        existing.url = best.url;
+        existing.label = best.label || existing.label;
+        if (best.ytMeta) existing.ytMeta = best.ytMeta;
+      }
+
+      if (item.isCurrent) existing.isCurrent = true;
+      if (!existing.title && item.title) existing.title = item.title;
+      existing.foundAt = Math.max(existing.foundAt || 0, item.foundAt || 0);
+    } else {
+      if (!Array.isArray(item.variants)) {
+        item.variants = [{
+          url: item.url,
+          label: item.label,
+          ytMeta: item.ytMeta,
+          score: getYtScore(item),
+        }];
+      }
+      byVideoId.set(key, item);
+      result.push(item);
+    }
+  }
+
+  return result;
+}
+
 export function parseItemInfo(item) {
   if (!isYouTubeItem(item)) return null;
 
   const title = (item.ytMeta && item.ytMeta.title) || item.pageTitle || 'YouTube Video';
-  let quality =
-    (item.ytMeta && item.ytMeta.quality) ||
-    (item.ytMeta && item.ytMeta.isAudio ? 'Audio' : item.kind === 'file' ? 'Progressive' : 'Adaptive');
 
-  if (item.ytMeta && item.ytMeta.isLive) {
-    quality += ' • live';
+  const rawVariants = Array.isArray(item.variants) && item.variants.length > 0
+    ? item.variants
+    : [{ url: item.url, label: item.label, ytMeta: item.ytMeta }];
+
+  const variants = [];
+  const seenUrls = new Set();
+  for (const v of rawVariants) {
+    if (!v || !v.url || seenUrls.has(v.url)) continue;
+    seenUrls.add(v.url);
+    const m = v.ytMeta || item.ytMeta || {};
+    let q = m.quality || (m.isAudio ? 'Audio' : item.kind === 'file' ? '720p' : 'Adaptive');
+    if (m.isAudio) q = 'Audio';
+    else if (/^[0-9]+$/.test(q)) q += 'p';
+    if (m.isLive) q += ' • Live';
+
+    variants.push({
+      url: v.url,
+      quality: q,
+      score: v.score || getYtScore(v),
+    });
   }
+
+  variants.sort((a, b) => b.score - a.score);
+
+  const quality = variants[0] ? variants[0].quality : 'HD';
 
   return {
     matched: true,
@@ -36,5 +135,6 @@ export function parseItemInfo(item) {
     platformName: 'YouTube',
     title,
     quality,
+    variants,
   };
 }

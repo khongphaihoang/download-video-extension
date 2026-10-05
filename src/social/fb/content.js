@@ -103,15 +103,34 @@
     return raw;
   }
 
+  function fbAssetIdFromUrl(raw) {
+    try {
+      const u = new URL(raw, location.href);
+      const efg = u.searchParams.get('efg');
+      if (efg) {
+        const decoded = atob(efg.replace(/_/g, '/').replace(/-/g, '+'));
+        const p = JSON.parse(decoded);
+        return String(p.xpv_asset_id || p.video_id || '');
+      }
+    } catch { /* ignore */ }
+    return null;
+  }
+
   function extractFbJson(text, addFn, bumpStat) {
     if (!text || text.length < 80) return;
+    const currentPostId = window.__VG_CONTENT_MODULES__.fb ? window.__VG_CONTENT_MODULES__.fb.matchVideoCode(location.href) : null;
     for (const key of FB_KEYS) {
       const re = new RegExp('"' + key + '"\\s*:\\s*"([^"]{20,4000})"', 'g');
       let m;
       while ((m = re.exec(text)) !== null) {
         const url = unescapeJson(m[1]);
-        if (/^https?:\/\//i.test(url) && addFn(url, 'fb-json', { label: key })) {
-          if (bumpStat) bumpStat('fb-json');
+        if (/^https?:\/\//i.test(url)) {
+          const assetId = fbAssetIdFromUrl(url);
+          const code = assetId || null;
+          const isCurrent = !!(currentPostId && code && String(code) === String(currentPostId));
+          if (addFn(url, 'fb-json', { label: key, code, isCurrent })) {
+            if (bumpStat) bumpStat('fb-json');
+          }
         }
       }
     }
@@ -230,7 +249,9 @@
 
           for (const key of FB_KEYS) {
             if (typeof obj[key] === 'string' && /^https?:\/\//i.test(obj[key])) {
-              const item = { url: unescapeJson(obj[key]), key, code: id ? String(id) : null };
+              const u = unescapeJson(obj[key]);
+              const assetId = fbAssetIdFromUrl(u);
+              const item = { url: u, key, code: id ? String(id) : (assetId || null) };
               if (isTargetNode) targetUrls.push(item);
               else otherUrls.push(item);
             }
@@ -258,30 +279,16 @@
         return;
       }
 
-      // Fallback regex: nếu có currentPostId, chỉ mark isCurrent nếu assetId khớp currentPostId
+      // Fallback regex: quét các chuỗi URL trong script
       for (const key of FB_KEYS) {
         const re = new RegExp('"' + key + '"\\s*:\\s*"([^"]{20,4000})"', 'g');
         let m;
         while ((m = re.exec(t)) !== null) {
           const url = unescapeJson(m[1]);
           if (/^https?:\/\//i.test(url)) {
-            let isCurrent = false;
-            let code = null;
-            if (currentPostId) {
-              try {
-                const u = new URL(url);
-                const efg = u.searchParams.get('efg');
-                if (efg) {
-                  const decoded = atob(efg.replace(/_/g, '/').replace(/-/g, '+'));
-                  const p = JSON.parse(decoded);
-                  const assetId = p.xpv_asset_id || p.video_id;
-                  if (assetId) code = String(assetId);
-                  if (code && String(code) === String(currentPostId)) {
-                    isCurrent = true;
-                  }
-                }
-              } catch { /* ignore */ }
-            }
+            const assetId = fbAssetIdFromUrl(url);
+            const code = assetId || null;
+            const isCurrent = !!(currentPostId && code && String(code) === String(currentPostId));
             if (addFn(url, 'fb-json', { label: key, isCurrent, code })) {
               if (bumpStat) bumpStat('fb-json');
             }
