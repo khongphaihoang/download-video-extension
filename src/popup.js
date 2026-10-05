@@ -172,11 +172,92 @@ function setStatus(text, tone) {
   el.status.className = 'status' + (tone ? ' ' + tone : '');
 }
 
+let activePreviewUrl = null;
+let hasPendingReload = false;
+
+function haveItemsChanged(prev, next) {
+  if (!prev || !next || prev.length !== next.length) return true;
+  for (let i = 0; i < prev.length; i++) {
+    if (
+      prev[i].url !== next[i].url ||
+      prev[i].code !== next[i].code ||
+      prev[i].isCurrent !== next[i].isCurrent ||
+      prev[i].title !== next[i].title
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function fetchPreviewFromTab(targetTabId, mediaUrl) {
+  // 1. Thử gửi message tới top frame của tab (frameId: 0)
+  try {
+    const res = await chrome.tabs.sendMessage(
+      targetTabId,
+      {
+        type: 'content:preview-media',
+        url: mediaUrl,
+      },
+      { frameId: 0 }
+    );
+    if (res && res.ok && res.dataUrl) return res;
+  } catch (err) {
+    console.warn('[Popup] sendMessage preview-media không phản hồi, thử executeScript...', err);
+  }
+
+  // 2. Fallback dùng chrome.scripting.executeScript (hoạt động ngay cả khi tab chưa F5 lại content script mới)
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: targetTabId },
+      func: async (url) => {
+        try {
+          let res = await fetch(url, { credentials: 'include' });
+          if (!res.ok && res.status === 403) res = await fetch(url);
+          if (!res.ok) return { ok: false, error: 'HTTP ' + res.status };
+          const ct = (res.headers.get('content-type') || '').toLowerCase();
+          if (ct.includes('text/html')) return { ok: false, error: '403 HTML' };
+          const blob = await res.blob();
+          return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () =>
+              resolve({ ok: true, dataUrl: reader.result, mimeType: blob.type || 'video/mp4' });
+            reader.onerror = () => resolve({ ok: false, error: 'FileReader error' });
+            reader.readAsDataURL(blob);
+          });
+        } catch (e) {
+          return { ok: false, error: String(e) };
+        }
+      },
+      args: [mediaUrl],
+    });
+    if (results && results[0] && results[0].result && results[0].result.ok) {
+      return results[0].result;
+    }
+  } catch (scriptErr) {
+    console.warn('[Popup] executeScript preview thất bại:', scriptErr);
+  }
+  return null;
+}
+
+let lastRenderedTabUrl = '';
+
 async function load() {
   const tab = await getActiveTab();
   if (!tab) return;
   tabId = tab.id;
   currentTabUrl = tab.url || '';
+
+  const urlChanged = currentTabUrl !== lastRenderedTabUrl;
+  if (urlChanged) {
+    // Nếu chuyển sang URL video khác trong tab, xóa preview cũ để nạp video mới
+    activePreviewUrl = null;
+  } else if (activePreviewUrl != null) {
+    // Nếu vẫn ở cùng một video và đang xem thử, hoãn reload để không đá văng người dùng khỏi player
+    hasPendingReload = true;
+    return;
+  }
+  lastRenderedTabUrl = currentTabUrl;
 
   // Phát hiện YouTube để hiển thị cảnh báo
   const isYouTube = socialModules.some((module) =>
@@ -221,9 +302,13 @@ async function load() {
   // Lọc và khử trùng theo nền tảng
   let filtered = fb.filterAndDedupe(rawList, isFbTab);
   filtered = tiktok.filterAndDedupe(filtered, isTtTab);
+
+  const changed = urlChanged || haveItemsChanged(allItems, filtered);
   allItems = filtered;
 
-  render();
+  if (changed) {
+    render();
+  }
   await runDiag();
 }
 
@@ -251,21 +336,21 @@ function visibleItems() {
       );
       if (matchedByCode.length > 0) {
         const currentInMatched = matchedByCode.filter((i) => i.isCurrent);
-        return currentInMatched.length > 0 ? currentInMatched : [matchedByCode[0]];
+        return currentInMatched.length > 0 ? [currentInMatched[0]] : [matchedByCode[0]];
       }
     }
 
     const current = allItems.filter((i) => i.isCurrent);
-    if (current.length > 0) return current;
+    if (current.length > 0) return [current[0]];
 
     if (isSingleVideoPage(currentTabUrl) && allItems.length > 0) {
       const cleanTabUrl = currentTabUrl.split('?')[0];
       const matched = allItems.filter((i) => i.pageUrl && i.pageUrl.split('?')[0] === cleanTabUrl);
-      if (matched.length > 0) return matched;
+      if (matched.length > 0) return [matched[0]];
       return [allItems[0]];
     }
 
-    if (allItems.length === 1) return allItems;
+    if (allItems.length > 0) return [allItems[0]];
     return [];
   }
   return kindFilter === 'all' ? allItems : allItems.filter((i) => i.kind === kindFilter);
@@ -275,6 +360,12 @@ function render() {
   const items = visibleItems();
 
   el.count.textContent = String(allItems.length);
+
+  const allChip = el.filters.querySelector('[data-kind="all"]');
+  if (allChip) {
+    allChip.textContent = allItems.length > 0 ? `Tất cả (${allItems.length})` : 'Tất cả';
+  }
+
   el.list.textContent = '';
   el.empty.classList.toggle('hidden', items.length > 0);
   const emptyText = el.empty.querySelector('p');
@@ -415,9 +506,45 @@ function renderItem(item) {
 
   let isPreviewing = false;
   let previewTimer = null;
-  btnPreview.addEventListener('click', () => {
+  let previewBlobUrl = null;
+
+  btnPreview.addEventListener('click', async () => {
     isPreviewing = !isPreviewing;
     if (isPreviewing) {
+      activePreviewUrl = item.url;
+      playerWrap.innerHTML = '';
+      btnPreview.textContent = '✖ Đóng xem';
+      btnPreview.classList.add('active');
+
+      const isTikTok = info.platform === 'tiktok' || (tiktok.isTikTokItem && tiktok.isTikTokItem(item));
+      if (isTikTok && tabId != null) {
+        playerWrap.innerHTML = '<div class="preview-loading"><span class="spinner-small"></span> Đang nạp video xem thử từ TikTok…</div>';
+        playerWrap.classList.add('show');
+        
+        const res = await fetchPreviewFromTab(tabId, item.url);
+        if (!isPreviewing) return; // Người dùng đã ấn đóng xem trong lúc đang nạp
+        if (res && res.ok && res.dataUrl) {
+          const [hdr, b64] = res.dataUrl.split(',');
+          const mime = hdr.match(/:(.*?);/)?.[1] || res.mimeType || 'video/mp4';
+          const bin = atob(b64);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          const blob = new Blob([bytes], { type: mime });
+          previewBlobUrl = URL.createObjectURL(blob);
+
+          playerWrap.innerHTML = '';
+          const video = document.createElement('video');
+          video.src = previewBlobUrl;
+          video.controls = true;
+          video.autoplay = true;
+          video.muted = false;
+          video.playsInline = true;
+          playerWrap.appendChild(video);
+          return;
+        }
+      }
+
+      if (!isPreviewing) return;
       playerWrap.innerHTML = '';
       const video = document.createElement('video');
       video.src = item.url;
@@ -425,10 +552,14 @@ function renderItem(item) {
       video.autoplay = true;
       video.muted = true;
       video.playsInline = true;
-      if (info.platform === 'facebook') {
+      if (info.platform === 'facebook' || isTikTok) {
         const showPreviewError = () => {
           if (!isPreviewing || !video.isConnected) return;
-          playerWrap.textContent = 'Không phát được bản xem thử. Link có thể đã hết hạn hoặc chỉ chứa luồng hình.';
+          playerWrap.innerHTML = `<div class="preview-error">
+            ${isTikTok 
+              ? 'Không thể tải toàn bộ luồng xem thử (TikTok chặn truy cập trực tiếp ngoài trang). Bạn hãy bấm nút <b>⬇️ Tải</b> để lưu video.' 
+              : 'Không phát được bản xem thử. Link có thể đã hết hạn hoặc chỉ chứa luồng hình.'}
+          </div>`;
         };
         video.addEventListener('loadeddata', () => clearTimeout(previewTimer), { once: true });
         video.addEventListener('error', showPreviewError, { once: true });
@@ -438,14 +569,21 @@ function renderItem(item) {
       }
       playerWrap.appendChild(video);
       playerWrap.classList.add('show');
-      btnPreview.textContent = '✖ Đóng xem';
-      btnPreview.classList.add('active');
     } else {
+      activePreviewUrl = null;
       clearTimeout(previewTimer);
+      if (previewBlobUrl) {
+        URL.revokeObjectURL(previewBlobUrl);
+        previewBlobUrl = null;
+      }
       playerWrap.innerHTML = '';
       playerWrap.classList.remove('show');
       btnPreview.textContent = '👁️ Xem thử';
       btnPreview.classList.remove('active');
+      if (hasPendingReload) {
+        hasPendingReload = false;
+        load();
+      }
     }
   });
 
@@ -632,5 +770,39 @@ if (el.btnCopyDiag) {
     setTimeout(() => (el.btnCopyDiag.textContent = oldText), 1500);
   });
 }
+
+// Tự động reload danh sách video khi dữ liệu tab thay đổi (lướt video mới hoặc bắt thêm link)
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'session' && tabId != null && changes['tab:' + tabId]) {
+    load();
+  }
+});
+
+// Tự động reload popup khi tab chuyển video (SPA pushState từ content.js)
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg && msg.type === 'tab:url-changed' && msg.url) {
+    currentTabUrl = msg.url;
+    load();
+  }
+});
+
+// Tự động reload popup khi tab chuyển video (SPA pushState từ trình duyệt)
+chrome.tabs.onUpdated.addListener((updatedTabId, changeInfo) => {
+  if (updatedTabId === tabId && changeInfo.url) {
+    currentTabUrl = changeInfo.url;
+    load();
+  }
+});
+
+// Kiểm tra định kỳ URL tab active phòng trường hợp SPA không bắn sự kiện
+setInterval(async () => {
+  try {
+    const tab = await getActiveTab();
+    if (tab && tab.id === tabId && tab.url && tab.url !== currentTabUrl) {
+      currentTabUrl = tab.url;
+      load();
+    }
+  } catch { /* ignore */ }
+}, 800);
 
 load();

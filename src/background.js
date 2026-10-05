@@ -236,6 +236,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.type === 'popup:clear') {
     log.info(`Xoá danh sách tab ${msg.tabId}`);
+    chrome.tabs.sendMessage(msg.tabId, { type: 'content:clear' }).catch(() => { });
     chrome.storage.session.remove(keyFor(msg.tabId)).then(() => {
       updateBadge(msg.tabId, 0);
       sendResponse({ ok: true });
@@ -279,13 +280,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 // --------------------------------------------- dọn dữ liệu khi điều hướng
+const tabOrigins = new Map();
 
-chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (changeInfo.url || changeInfo.status === 'loading') {
-    chrome.storage.session.remove(keyFor(tabId)).then(() => updateBadge(tabId, 0));
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  // Chỉ dọn dữ liệu nếu tab chuyển hẳn sang website / origin khác (ví dụ: từ tiktok.com sang google.com)
+  if (changeInfo.url) {
+    try {
+      const newOrigin = new URL(changeInfo.url).origin;
+      const oldOrigin = tabOrigins.get(tabId);
+      if (oldOrigin && oldOrigin !== newOrigin) {
+        log.info(`[Tab ${tabId}] Chuyển origin từ ${oldOrigin} sang ${newOrigin} -> dọn storage`);
+        chrome.storage.session.remove(keyFor(tabId)).then(() => updateBadge(tabId, 0));
+      }
+      tabOrigins.set(tabId, newOrigin);
+    } catch { /* ignore */ }
+  } else if (changeInfo.status === 'loading' && tab && tab.url) {
+    try {
+      tabOrigins.set(tabId, new URL(tab.url).origin);
+    } catch { /* ignore */ }
   }
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
+  tabOrigins.delete(tabId);
   chrome.storage.session.remove(keyFor(tabId));
 });

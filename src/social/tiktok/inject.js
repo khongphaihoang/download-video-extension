@@ -31,7 +31,9 @@
     return s
       .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
       .replace(/\\\//g, '/')
-      .replace(/\\\\/g, '\\');
+      .replace(/\\\\/g, '\\')
+      .replace(/&amp;/g, '&')
+      .trim();
   }
 
   function recordPostVideo(code, url, extra) {
@@ -76,45 +78,49 @@
     function addUrl(u, rank, label) {
       if (typeof u === 'string') {
         const clean = unescapeJson(u);
-        if (/^https?:\/\//i.test(clean)) {
+        if (/^https?:\/\//i.test(clean) && !/\.(jpe?g|png|gif|webp|avif|heic|svg|ico|css|js|json)(\?|#|$)/i.test(clean)) {
           urls.push({ url: clean, rank, label });
         }
       }
     }
 
-    function addFromUrlList(target, rank, label) {
+    function addFromTarget(target, rank, label) {
       if (!target) return;
       if (typeof target === 'string') {
         addUrl(target, rank, label);
         return;
       }
       if (typeof target === 'object') {
-        const list = target.url_list || target.urlList || target.UrlList || [];
+        const list = target.url_list || target.urlList || target.UrlList || target.URLList || [];
         if (Array.isArray(list)) {
           for (const u of list) addUrl(u, rank, label);
         }
         if (typeof target.url === 'string') addUrl(target.url, rank, label);
         if (typeof target.main_url === 'string') addUrl(target.main_url, rank, label);
+        if (typeof target.play_url === 'string') addUrl(target.play_url, rank, label);
       }
     }
 
-    // 1. downloadAddr / download_addr (ưu tiên vì thường nét nhất và ít watermark)
-    addFromUrlList(videoObj.downloadAddr, 3, 'download');
-    addFromUrlList(videoObj.download_addr, 3, 'download');
+    // 1. downloadAddr / download_addr (ưu tiên vì nét và ít watermark)
+    addFromTarget(videoObj.downloadAddr, 4, 'download');
+    addFromTarget(videoObj.download_addr, 4, 'download');
 
-    // 2. playAddr / play_addr
-    addFromUrlList(videoObj.playAddr, 2, 'play');
-    addFromUrlList(videoObj.play_addr, 2, 'play');
-    addFromUrlList(videoObj.playUrl, 2, 'play');
-    addFromUrlList(videoObj.play_url, 2, 'play');
+    // 2. playAddr / play_addr / playUrl / play_url
+    addFromTarget(videoObj.playAddr, 2, 'play');
+    addFromTarget(videoObj.play_addr, 2, 'play');
+    addFromTarget(videoObj.playUrl, 2, 'play');
+    addFromTarget(videoObj.play_url, 2, 'play');
 
     // 3. bitrateInfo / bitrate_info
-    const bitrates = videoObj.bitrateInfo || videoObj.bitrate_info;
+    const bitrates = videoObj.bitrateInfo || videoObj.bitrate_info || videoObj.BitrateInfo;
     if (Array.isArray(bitrates)) {
       for (const b of bitrates) {
-        const rank = (Number(b.Bitrate || b.bitrate) || 1000) / 1000;
+        if (!b) continue;
+        const br = Number(b.Bitrate || b.bitrate || b.bit_rate) || 1000;
+        const rank = 2 + (br / 1000000);
         const label = b.GearName || b.gear_name || 'bitrate';
-        addFromUrlList(b.PlayAddr || b.playAddr || b.play_addr, rank, label);
+        const target = b.PlayAddr || b.playAddr || b.play_addr;
+        addFromTarget(target, rank, label);
       }
     }
 
@@ -125,7 +131,7 @@
     if (!node || typeof node !== 'object') return;
     const id = node.id || node.aweme_id || node.item_id || node.videoId;
     const normalizedId = id != null ? String(id) : null;
-    const videoObj = node.video || (node.playAddr || node.downloadAddr ? node : null);
+    const videoObj = node.video || (node.playAddr || node.downloadAddr || node.bitrateInfo || node.play_addr ? node : null);
 
     if (normalizedId && /^[0-9]{15,25}$/.test(normalizedId) && videoObj) {
       const desc = node.desc || node.title || null;
@@ -244,8 +250,9 @@
     init(ctx) {
       if (!isTikTokPage()) return;
       scanPageData(ctx);
-      setTimeout(() => scanPageData(ctx), 600);
-      setTimeout(() => scanPageData(ctx), 1800);
+      setTimeout(() => scanPageData(ctx), 300);
+      setTimeout(() => scanPageData(ctx), 1000);
+      setTimeout(() => scanPageData(ctx), 2500);
     },
 
     isCandidate(url, host, via) {
@@ -274,11 +281,7 @@
       // 4. Host CDN video của TikTok
       const isTtCdn = /(^|\.)(tiktokcdn\.com|tiktokcdn-us\.com|byteoversea\.com|ibytedtos\.com|(v[0-9]+[^.]*|webapp[^.]*)\.tiktok\.com)$/i.test(host);
 
-      // 5. Đặc trưng video của TikTok (bao gồm cả các bucket tos- / obj-)
-      const hasVideoPath = /\/(?:video\/tos|tos-[a-z0-9-]+|video\/mime|play|mp4|aweme\/v1\/play)/i.test(url)
-        || /mime_type=video_mp4/i.test(url)
-        || /\.(mp4|m4v|webm|mov)(\?|#|$)/i.test(url);
-
+      // 5. Nguồn trực tiếp từ TikTok post metadata hoặc React Fiber
       const isDirectTtSource = [
         'tt-response', 'tt-single-post', 'tt-id-match', 'shortcode-resolved',
         'react-fiber', 'media-src', 'video-src'
@@ -287,6 +290,11 @@
       if (isDirectTtSource) {
         return { isVideo: true, allow: true };
       }
+
+      // 6. Đặc trưng video của TikTok (bao gồm cả các bucket tos- / obj-)
+      const hasVideoPath = /\/(?:video\/tos|tos-[a-z0-9-]+|video\/mime|play|mp4|aweme\/v1\/play)/i.test(url)
+        || /mime_type=video_mp4/i.test(url)
+        || /\.(mp4|m4v|webm|mov)(\?|#|$)/i.test(url);
 
       if (via === 'fetch' || via === 'xhr') {
         const isVideo = isTtCdn && hasVideoPath;
@@ -480,4 +488,3 @@
     ttVideoIdFromUrl,
   };
 })();
-

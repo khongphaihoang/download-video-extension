@@ -13,13 +13,14 @@ export function isTikTokUrl(url) {
 
 export function tiktokMediaKey(item) {
   try {
+    const code = item.code || (item.pageUrl && item.pageUrl.match(/\/(?:video|v|photo|share\/video)\/([0-9]{15,25})/i)?.[1]);
+    if (code) return `tiktok:${code}`;
     const media = new URL(item.url);
     if (/(^|\.)(tiktokcdn\.com|tiktokcdn-us\.com|byteoversea\.com|ibytedtos\.com|(v[0-9]+[^.]*|webapp[^.]*)\.tiktok\.com)$/i.test(media.hostname)) {
-      if (item.code) return `tiktok:${item.code}:${media.pathname}`;
       return `tiktok:${media.pathname}`;
     }
   } catch { /* ignore */ }
-  return item.code ? `tiktok:${item.code}` : item.url;
+  return item.url;
 }
 
 export const mediaKey = tiktokMediaKey;
@@ -55,25 +56,7 @@ export const ignoreItem = isIgnored;
 
 export function updateExisting(existing, item, key) {
   let changed = false;
-
-  const getRank = (it) => {
-    const sources = it.sources || [];
-    if (sources.some((s) => s.includes('download') || s === 'inject:tt-single-post' || s === 'tt-json')) return 3;
-    if (sources.some((s) => s === 'inject:tt-response' || s === 'inject:shortcode-resolved' || s === 'inject:react-fiber' || s === 'inject:tt-id-match')) return 2;
-    return 1;
-  };
-
-  const newRank = getRank(item);
-  const oldRank = getRank(existing);
-
-  if ((newRank > oldRank || (item.isCurrent && !existing.isCurrent)) && item.url !== existing.url) {
-    existing.url = item.url;
-    existing.host = item.host;
-    existing.observedUrl = item.observedUrl || item.url;
-    changed = true;
-  }
-
-  if (item.title && (!existing.title || (item.isCurrent && item.title !== existing.title))) {
+  if (item.title && (!existing.title || item.isCurrent)) {
     existing.title = item.title;
     changed = true;
   }
@@ -87,6 +70,20 @@ export function updateExisting(existing, item, key) {
   }
   if (item.isCurrent && !existing.isCurrent) {
     existing.isCurrent = true;
+    changed = true;
+  }
+
+  // Nếu item mới đến từ nguồn xác thực của TikTok post và URL khác URL hiện tại
+  const HIGH_PRIO_SOURCES = ['inject:tt-single-post', 'inject:shortcode-resolved', 'inject:react-fiber', 'tt-json', 'inject:tt-response'];
+  const hasHighPrio = Array.isArray(item.sources) && item.sources.some((s) => HIGH_PRIO_SOURCES.includes(s));
+  const existingHighPrio = Array.isArray(existing.sources) && existing.sources.some((s) => HIGH_PRIO_SOURCES.includes(s));
+
+  if ((hasHighPrio && !existingHighPrio) || (item.isCurrent && item.url && item.url !== existing.url)) {
+    existing.url = item.url;
+    existing.observedUrl = item.observedUrl || item.url;
+    if (item.title) existing.title = item.title;
+    if (item.pageUrl) existing.pageUrl = item.pageUrl;
+    existing.foundAt = item.foundAt || Date.now();
     changed = true;
   }
   return changed;

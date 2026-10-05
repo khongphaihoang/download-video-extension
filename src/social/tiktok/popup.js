@@ -84,6 +84,7 @@ export function filterAndDedupe(items, isTtTab) {
   });
 
   if (isTtTab) {
+    const HIGH_PRIO_SOURCES = ['inject:tt-single-post', 'inject:shortcode-resolved', 'inject:react-fiber', 'tt-json', 'inject:tt-response'];
     const byKey = new Map();
     list = list.filter((item) => {
       let key = item.code;
@@ -96,23 +97,19 @@ export function filterAndDedupe(items, isTtTab) {
       }
       const existing = byKey.get(key);
       if (existing) {
-        const getRank = (it) => {
-          const sources = it.sources || [];
-          if (sources.some((s) => s.includes('download') || s === 'inject:tt-single-post' || s === 'tt-json')) return 3;
-          if (sources.some((s) => s === 'inject:tt-response' || s === 'inject:shortcode-resolved' || s === 'inject:react-fiber' || s === 'inject:tt-id-match')) return 2;
-          return 1;
-        };
-
-        if (getRank(item) > getRank(existing) || (item.isCurrent && !existing.isCurrent)) {
-          existing.url = item.url;
-          existing.foundAt = item.foundAt || existing.foundAt;
-          if (item.label) existing.label = item.label;
-        }
+        const itemHasHighPrio = Array.isArray(item.sources) && item.sources.some((s) => HIGH_PRIO_SOURCES.includes(s));
+        const existingHasHighPrio = Array.isArray(existing.sources) && existing.sources.some((s) => HIGH_PRIO_SOURCES.includes(s));
 
         if (item.isCurrent) existing.isCurrent = true;
-        if (item.title && (!existing.title || item.isCurrent)) existing.title = item.title;
+        if (item.title && (!existing.title || itemHasHighPrio)) existing.title = item.title;
         if (item.code && !existing.code) existing.code = item.code;
-        if (item.pageUrl && (!existing.pageUrl || item.isCurrent)) existing.pageUrl = item.pageUrl;
+        if (item.pageUrl && (!existing.pageUrl || itemHasHighPrio)) existing.pageUrl = item.pageUrl;
+
+        // Ưu tiên URL từ nguồn xác thực post hoặc có isCurrent
+        if ((itemHasHighPrio && !existingHasHighPrio) || (item.isCurrent && !existing.isCurrent) || ((item.foundAt || 0) > (existing.foundAt || 0))) {
+          existing.url = item.url;
+          existing.foundAt = item.foundAt;
+        }
         return false;
       }
       byKey.set(key, item);

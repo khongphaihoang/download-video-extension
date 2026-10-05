@@ -200,7 +200,7 @@
 
     const hasMediaExt = FILE_RE.test(url);
     const isRecognizedPath = /\/(?:o1\/v\/|v\/t[0-9])/i.test(url)
-      || /\/(?:video\/tos|video\/mime|play)/i.test(url)
+      || /\/(?:video\/tos|tos-[a-z0-9-]+|video\/mime|play|aweme\/v1\/play)/i.test(url)
       || /mime_type=video_mp4/i.test(url);
     const looksMedia = hasMediaExt || isRecognizedPath || source === 'fb-json' || source === 'ig-json' || source === 'tt-json'
       || (typeof source === 'string' && (source.startsWith('inject:fb-') || source.startsWith('inject:ig-') || source.startsWith('inject:tt-')))
@@ -325,6 +325,7 @@
 
   // ------------------------------- nhận message từ MAIN world (inject.js)
   let injectAlive = false;
+  let handleUrlChange = null;
 
   window.addEventListener('message', (e) => {
     if (e.source !== window) return;
@@ -352,22 +353,17 @@
 
     if (typeof d.url !== 'string') return;
 
-    if (d.via === 'url-change') {
-      log.info('🔄 [SPA] URL đã thay đổi:', d.url);
-      for (const it of items.values()) {
-        it.isCurrent = false;
-      }
-      setTimeout(() => {
-        scanAll();
-        checkViewportReels();
-      }, 100);
-      return;
-    }
-
     if (d.via === '__ping') {
       injectAlive = true;
       log.info('Đã kết nối với inject.js (MAIN world)');
       addLog('system', 'inject', 'MAIN world script đã kết nối', {});
+      return;
+    }
+
+    if (d.via === 'url-change') {
+      if (typeof handleUrlChange === 'function') {
+        handleUrlChange(d.url);
+      }
       return;
     }
 
@@ -492,17 +488,10 @@
       el.parentElement;
 
     let title = null;
-    let pageUrl = null;
+    let pageUrl = isSingleVideoUrl ? location.href : null;
     const poster = el.poster || null;
 
     if (container) {
-      const linkEl = container.querySelector(
-        'a[href*="/reel/"], a[href*="/reels/"], a[href*="/p/"], a[href*="/videos/"], a[href*="/watch"], a[href*="?v="], a[href*="/posts/"], a[href*="story_fbid="], a[href*="/share/v/"], a[href*="/share/r/"], a[href*="/video/"]'
-      );
-      if (linkEl && linkEl.href) {
-        pageUrl = linkEl.href;
-      }
-
       const ttDesc = container.querySelector('[data-e2e="browse-video-desc"], [data-e2e="user-title"], [data-e2e="video-desc"]');
       if (ttDesc && ttDesc.textContent.trim().length > 2) {
         title = ttDesc.textContent.trim().slice(0, 100);
@@ -513,12 +502,15 @@
           title = textEl.textContent.trim().slice(0, 100);
         }
       }
+      if (!pageUrl) {
+        const linkEl = container.querySelector(
+          'a[href*="/reel/"], a[href*="/reels/"], a[href*="/p/"], a[href*="/videos/"], a[href*="/watch"], a[href*="?v="], a[href*="/posts/"], a[href*="story_fbid="], a[href*="/share/v/"], a[href*="/share/r/"], a[href*="/video/"]'
+        );
+        if (linkEl && linkEl.href) {
+          pageUrl = linkEl.href;
+        }
+      }
     }
-
-    if (!pageUrl && isSingleVideoUrl) {
-      pageUrl = location.href;
-    }
-
     return { title, pageUrl: pageUrl || location.href, poster };
   }
 
@@ -585,23 +577,15 @@
   let scrollCheckTimer = null;
   function checkViewportReels() {
     const videos = document.querySelectorAll('video');
-    let bestVideo = null;
-    let maxArea = 0;
-
     for (const v of videos) {
       if (v.paused) continue;
       const rect = v.getBoundingClientRect();
-      const visibleHeight = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
-      const visibleWidth = Math.max(0, Math.min(rect.right, window.innerWidth) - Math.max(rect.left, 0));
-      const area = visibleHeight * visibleWidth;
-      if (area > 20000 && area > maxArea) {
-        maxArea = area;
-        bestVideo = v;
+      const visibleHeight = Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0);
+      const visibleWidth = Math.min(rect.right, window.innerWidth) - Math.max(rect.left, 0);
+      if (visibleHeight > 150 && visibleWidth > 150) {
+        markVideoActive(v, 'reels-active');
+        break;
       }
-    }
-
-    if (bestVideo) {
-      markVideoActive(bestVideo, 'reels-active');
     }
   }
 
@@ -631,6 +615,65 @@
 
     document.addEventListener('visibilitychange', scanAll);
     window.addEventListener('pagehide', flush, true);
+
+    let lastContentUrl = location.href;
+    handleUrlChange = function (newUrl) {
+      const targetUrl = newUrl || location.href;
+      if (targetUrl === lastContentUrl) return;
+      const oldUrl = lastContentUrl;
+      lastContentUrl = targetUrl;
+      log.info('URL trang thay đổi (SPA navigation):', { from: oldUrl, to: lastContentUrl });
+
+      try {
+        chrome.runtime.sendMessage({
+          type: 'tab:url-changed',
+          url: targetUrl,
+        }).catch(() => {});
+      } catch { /* ignore */ }
+
+      // Khi chuyển video trên trang single video (TikTok, Reels, Watch):
+      // Đặt tất cả item cũ isCurrent = false và đánh dấu _needsUpdate để background cập nhật
+      let changedOld = false;
+      for (const it of items.values()) {
+        if (it.isCurrent) {
+          it.isCurrent = false;
+          it._needsUpdate = true;
+          changedOld = true;
+        }
+      }
+      if (changedOld) scheduleFlush();
+
+      scanAll();
+
+      let newCode = null;
+      for (const m of Object.values(socialModules)) {
+        if (typeof m.matchVideoCode === 'function') {
+          newCode = m.matchVideoCode(targetUrl);
+          if (newCode) break;
+        }
+      }
+
+      window.postMessage({
+        __videoGrabberAction: 'resolveVideo',
+        code: newCode,
+        pageUrl: targetUrl,
+        title: document.title,
+      }, '*');
+    };
+
+    window.addEventListener('popstate', handleUrlChange);
+    const origPush = history.pushState;
+    history.pushState = function () {
+      const res = origPush.apply(this, arguments);
+      setTimeout(handleUrlChange, 100);
+      return res;
+    };
+    const origReplace = history.replaceState;
+    history.replaceState = function () {
+      const res = origReplace.apply(this, arguments);
+      setTimeout(handleUrlChange, 100);
+      return res;
+    };
   }
 
   boot();
@@ -694,6 +737,13 @@
       return true;
     }
 
+    if (msg.type === 'content:clear') {
+      items.clear();
+      sent.clear();
+      sendResponse({ ok: true });
+      return true;
+    }
+
     if (msg.type === 'content:probe') {
       (async () => {
         try {
@@ -715,7 +765,40 @@
       return true;
     }
 
+    if (msg.type === 'content:preview-media') {
+      if (window.top !== window) return undefined;
+      (async () => {
+        try {
+          log.info('Đang nạp video xem thử qua session trang web...', msg.url);
+          let res = await fetch(msg.url, { credentials: 'include' });
+          if (!res.ok && res.status === 403) {
+            log.warn('Fetch xem thử kèm credentials bị 403, thử lại không kèm credentials...');
+            res = await fetch(msg.url);
+          }
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const ct = (res.headers.get('content-type') || '').toLowerCase();
+          if (ct.includes('text/html')) {
+            throw new Error('Máy chủ từ chối phát video (403)');
+          }
+          const blob = await res.blob();
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            sendResponse({ ok: true, dataUrl: reader.result, mimeType: blob.type || 'video/mp4' });
+          };
+          reader.onerror = () => {
+            sendResponse({ ok: false, error: 'Đọc dữ liệu video xem thử thất bại' });
+          };
+          reader.readAsDataURL(blob);
+        } catch (err) {
+          log.err('Nạp video xem thử thất bại:', err);
+          sendResponse({ ok: false, error: String(err) });
+        }
+      })();
+      return true;
+    }
+
     if (msg.type === 'content:download-blob') {
+      if (window.top !== window) return undefined;
       (async () => {
         try {
           log.info('Đang tải video blob qua session trang web...', msg.url);

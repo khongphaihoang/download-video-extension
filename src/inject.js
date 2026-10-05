@@ -280,16 +280,11 @@
       const modules = this.__vgMatchedModules;
       this.addEventListener('load', function () {
         try {
-          let text = null;
-          if (this.responseType === '' || this.responseType === 'text') {
-            text = typeof this.responseText === 'string' ? this.responseText : null;
-          } else if (this.responseType === 'json' && this.response && typeof this.response === 'object') {
-            try { text = JSON.stringify(this.response); } catch { /* ignore */ }
-          }
-          if (text && text.length <= MAX_SCAN_CHARS) {
+          if ((this.responseType === '' || this.responseType === 'text')
+            && typeof this.responseText === 'string' && this.responseText.length <= MAX_SCAN_CHARS) {
             for (const m of modules) {
               if (typeof m.scanResponse === 'function') {
-                try { m.scanResponse(text, moduleContext); }
+                try { m.scanResponse(this.responseText, moduleContext); }
                 catch { /* ignore */ }
               }
             }
@@ -366,14 +361,22 @@
 
   // Lắng nghe thay đổi URL khi cuộn Reels / chuyển video SPA (pushState, replaceState, popstate)
   function onUrlChange() {
-    setTimeout(() => {
-      window.postMessage({ __videoGrabber: true, via: 'url-change', url: location.href }, '*');
-      for (const m of activeModules) {
-        if (typeof m.onUrlChange === 'function') {
-          try { m.onUrlChange(location.href, moduleContext); }
-          catch { /* ignore */ }
-        }
+    try {
+      window.postMessage({
+        __videoGrabber: true,
+        via: 'url-change',
+        url: location.href,
+      }, '*');
+    } catch { /* ignore */ }
+
+    for (const m of activeModules) {
+      if (typeof m.onUrlChange === 'function') {
+        try { m.onUrlChange(location.href, moduleContext); }
+        catch { /* ignore */ }
       }
+    }
+
+    setTimeout(() => {
       const activeVideo =
         document.querySelector('video:not([paused])') ||
         lastActiveVideoEl ||
