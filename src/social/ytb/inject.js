@@ -129,13 +129,96 @@
     lastYtEntry = entry;
   }
 
+  const resolvedIds = new Set();
+
+  async function resolveYtStream(videoId, log) {
+    if (!videoId || resolvedIds.has(videoId)) return;
+    resolvedIds.add(videoId);
+
+    try {
+      const endpoint = 'https://www.youtube.com/youtubei/v1/player?app=android&prettyPrint=false';
+      const clientVersion = '21.26.364';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-YouTube-Client-Name': '3',
+          'X-YouTube-Client-Version': clientVersion,
+        },
+        body: JSON.stringify({
+          videoId,
+          context: {
+            client: {
+              clientName: 'ANDROID',
+              clientVersion,
+              androidSdkVersion: 30,
+              osName: 'Android',
+              hl: 'en',
+              gl: 'US',
+            },
+          },
+        }),
+      });
+
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.playabilityStatus && data.playabilityStatus.status !== 'OK') return;
+
+      const title = (data.videoDetails && data.videoDetails.title) || currentYtTitle || '';
+      if (title && !currentYtTitle) currentYtTitle = title;
+
+      const formats = (data.streamingData && data.streamingData.formats) || [];
+      let best = null;
+      for (const fmt of formats) {
+        if (!fmt || !fmt.url) continue;
+        if (fmt.mimeType && fmt.mimeType.startsWith('audio/')) continue;
+        if (!best || (Number(fmt.height) || 0) > (Number(best.height) || 0)) {
+          best = fmt;
+        }
+      }
+
+      if (best) {
+        const quality = best.qualityLabel || (best.height ? `${best.height}p` : '480p');
+        const meta = {
+          label: 'YT ' + quality,
+          quality,
+          mimeType: best.mimeType || 'video/mp4',
+          width: best.width || 0,
+          height: best.height || 0,
+          contentLength: best.contentLength || '',
+          title,
+          videoId,
+          isAdaptive: false,
+          isAudio: false,
+          isCurrent: true,
+          resolved: true,
+        };
+
+        if (log) log.info(`🎯 [yt-android] Lấy thành công link tải trực tiếp (${quality}):`, best.url.slice(0, 90));
+        reportYt(best.url, 'yt-progressive', meta);
+
+        const entry = {
+          url: best.url,
+          via: 'yt-progressive',
+          meta,
+        };
+        ytMap.set(videoId, entry);
+        lastYtEntry = entry;
+      }
+    } catch (err) {
+      if (log) log.warn('Lỗi khi lấy luồng từ Innertube:', err);
+    }
+  }
+
   function reportYtCurrent() {
     const pageId = ytVideoIdFromUrl(location.href);
+    if (pageId) resolveYtStream(pageId, null);
     if (liveYtEntry && liveYtEntry.pageId === pageId) {
       reportYt(liveYtEntry.url, liveYtEntry.via, { ...liveYtEntry.meta, isCurrent: true });
       return true;
     }
     const id = currentYtVideoId();
+    if (id) resolveYtStream(id, null);
     let entry = id ? ytMap.get(id) : null;
     if (!entry && pageId) entry = lastYtEntry;
     if (!entry) return false;
@@ -163,7 +246,12 @@
     }
     if (!/(^|\.)googlevideo\.com$/i.test(u.hostname)) return;
     if (!/\/videoplayback$/i.test(u.pathname)) return;
+    // Bỏ qua các gói chunk stream SABR nội bộ (application/vnd.yt-ump) không thể tải
     if (u.searchParams.has('sabr')) return;
+
+    const itag = u.searchParams.get('itag') || '';
+    if (!itag) return;
+
     for (const p of ['range', 'rn', 'rbuf', 'sq', 'alr']) u.searchParams.delete(p);
     const url = u.toString();
     if (liveYtSeen.has(url)) return;
@@ -172,12 +260,17 @@
     const mime = (u.searchParams.get('mime') || '').toLowerCase();
     const isAudio = mime.startsWith('audio/');
     const isVideoOnly = u.searchParams.has('aitags');
-    const itag = u.searchParams.get('itag') || '';
     const info = YT_ITAG[itag] || {};
     const via = isAudio || isVideoOnly ? 'yt-adaptive' : 'yt-progressive';
+
+    const isLiveBroadcast = u.searchParams.get('source') === 'yt_live_broadcast' ||
+      location.pathname.startsWith('/live/') ||
+      !!(window.ytInitialPlayerResponse && window.ytInitialPlayerResponse.videoDetails && window.ytInitialPlayerResponse.videoDetails.isLiveContent);
+
+    const quality = info.q || (info.h ? `${info.h}p` : '');
     const meta = {
-      label: 'YT ' + (info.q || (itag ? 'itag ' + itag : 'live')) + ' (live)',
-      quality: info.q || '',
+      label: 'YT ' + (quality || ('itag ' + itag)) + (isAudio ? ' (Audio)' : isVideoOnly ? ' (chỉ hình)' : ''),
+      quality: quality || (isAudio ? 'Audio' : ''),
       mimeType: mime || '',
       width: 0,
       height: info.h || 0,
@@ -185,9 +278,9 @@
       videoId: currentYtVideoId() || '',
       isAdaptive: via !== 'yt-progressive',
       isAudio,
-      isLive: true,
+      isLive: isLiveBroadcast,
     };
-    if (log) log.info('🎯 [yt-live] Bắt được link player đang dùng:', url.slice(0, 90));
+    if (log) log.info('🎯 [yt-media] Bắt được link player đang dùng:', url.slice(0, 90));
     reportYt(url, via, meta);
 
     const rank = via === 'yt-progressive' ? 100000 + (info.h || 0) : isAudio ? -1 : info.h || 0;
@@ -205,6 +298,10 @@
     const title = (playerResponse.videoDetails && playerResponse.videoDetails.title) || '';
     const videoId = (playerResponse.videoDetails && playerResponse.videoDetails.videoId) || '';
     currentYtTitle = title;
+
+    if (videoId) {
+      resolveYtStream(videoId, log);
+    }
 
     const formats = sd.formats || [];
     if (log) {

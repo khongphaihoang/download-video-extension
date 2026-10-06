@@ -162,6 +162,13 @@ async function downloadOne(item, index, total, tabId) {
   const meta = typeof item === 'object' ? item : null;
   const filename = filenameFor(url, total > 1 ? index : null, meta);
 
+  // Cho phép module xử lý download đặc thù (VD: YouTube, TikTok) trước
+  for (const module of socialModules) {
+    if (typeof module.handleDownload !== 'function') continue;
+    const handled = await module.handleDownload(item, filename, tabId, log);
+    if (handled) return handled;
+  }
+
   let probeCheck = { shouldDownload: true };
   for (const module of socialModules) {
     if (typeof module.probeDownload !== 'function') continue;
@@ -170,13 +177,6 @@ async function downloadOne(item, index, total, tabId) {
   }
   if (!probeCheck.shouldDownload) {
     return { ok: false, url, error: probeCheck.error };
-  }
-
-  // Cho phép module xử lý download đặc thù (VD: TikTok cần tải qua tab session để tránh bị CDN Akamai trả về 403 HTML)
-  for (const module of socialModules) {
-    if (typeof module.handleDownload !== 'function') continue;
-    const handled = await module.handleDownload(item, filename, tabId, log);
-    if (handled) return handled;
   }
 
   try {
@@ -213,6 +213,55 @@ async function downloadOne(item, index, total, tabId) {
   }
 }
 
+// ------------------------------------------------- YouTube HQ qua yt-dlp (native)
+const NATIVE_HOST = 'com.videograbber.ytdlp';
+
+function nativeErrorMessage(err) {
+  const m = String((err && err.message) || err || '');
+  if (/not found|forbidden|Specified native messaging host/i.test(m)) {
+    return 'Chưa cài native host. Chạy native-host\\install.ps1 -ExtensionId ' + chrome.runtime.id;
+  }
+  return m || 'Lỗi native host';
+}
+
+async function hqPing() {
+  try {
+    const res = await chrome.runtime.sendNativeMessage(NATIVE_HOST, { action: 'ping' });
+    return { ok: true, ...res };
+  } catch (err) {
+    return { ok: false, error: nativeErrorMessage(err) };
+  }
+}
+
+/** Tải YouTube chất lượng cao: yt-dlp tải hình+tiếng rồi ffmpeg ghép. Tiến độ gửi về popup. */
+function hqDownload(url, height) {
+  return new Promise((resolve) => {
+    let port;
+    try {
+      port = chrome.runtime.connectNative(NATIVE_HOST);
+    } catch (err) {
+      resolve({ ok: false, error: nativeErrorMessage(err) });
+      return;
+    }
+    let settled = false;
+    port.onMessage.addListener((m) => {
+      if (m && m.type === 'progress') {
+        chrome.runtime.sendMessage({ type: 'hq:progress', url, ...m }).catch(() => { });
+      } else if (m && m.type === 'done') {
+        settled = true;
+        resolve(m);
+        port.disconnect();
+      }
+    });
+    port.onDisconnect.addListener(() => {
+      if (settled) return;
+      const le = chrome.runtime.lastError;
+      resolve({ ok: false, error: nativeErrorMessage(le && le.message) });
+    });
+    port.postMessage({ action: 'download', url, height: height || null });
+  });
+}
+
 // ------------------------------------------------------------ message bus
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -225,6 +274,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       (count) => sendResponse({ ok: true, count }),
       (err) => sendResponse({ ok: false, error: String(err) })
     );
+    return true;
+  }
+
+  if (msg.type === 'popup:hq-ping') {
+    hqPing().then(sendResponse);
+    return true;
+  }
+
+  if (msg.type === 'popup:hq-download') {
+    log.info(`Tải YouTube HQ (${msg.height || 'best'}p):`, msg.url);
+    hqDownload(msg.url, msg.height).then(sendResponse);
     return true;
   }
 

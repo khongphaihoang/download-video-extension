@@ -1,0 +1,57 @@
+# =======================================================
+# Native Host (Cấu hình cục bộ theo từng máy)
+# =======================================================
+# Được sinh tự động khi chạy install.ps1, chứa đường dẫn Python
+# và Extension ID riêng của máy đó. Không nên đưa lên Git.
+native-host/*.json
+native-host/*.bat
+
+# =======================================================
+# IDE & Code Editors
+# =======================================================
+.idea/
+.vscode/
+.commandcode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# =======================================================
+# AI Agent Skills (Công cụ AI Workspace cục bộ)
+# =======================================================
+.agents/
+skills-lock.json
+
+# =======================================================
+# Python Cache & Virtual Environments
+# =======================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+.venv/
+env/
+venv/
+
+# =======================================================
+# Logs & Video Test tải về
+# =======================================================
+*.log
+log/*.mp4
+log/test-dl/
+
+# =======================================================
+# Chrome Extension Auto-generated Files
+# =======================================================
+_metadata/generated_indexed_rulesets/
+
+# =======================================================
+# Hệ điều hành (OS metadata)
+# =======================================================
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store

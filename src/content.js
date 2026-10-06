@@ -748,10 +748,11 @@
       (async () => {
         try {
           const isTt = /tiktok/i.test(msg.url);
+          const isYt = /googlevideo\.com|youtube\.com/i.test(msg.url);
           const headers = isTt ? {} : { Range: 'bytes=0-1' };
           const res = await fetch(msg.url, {
             headers,
-            credentials: 'include',
+            credentials: isYt ? 'omit' : 'include',
           });
           sendResponse({
             ok: res.ok,
@@ -770,10 +771,20 @@
       (async () => {
         try {
           log.info('Đang nạp video xem thử qua session trang web...', msg.url);
-          let res = await fetch(msg.url, { credentials: 'include' });
-          if (!res.ok && res.status === 403) {
-            log.warn('Fetch xem thử kèm credentials bị 403, thử lại không kèm credentials...');
+          const isYt = /googlevideo\.com|youtube\.com/i.test(msg.url);
+          let res;
+          if (isYt) {
             res = await fetch(msg.url);
+          } else {
+            try {
+              res = await fetch(msg.url, { credentials: 'include' });
+              if (!res.ok && res.status === 403) {
+                log.warn('Fetch xem thử kèm credentials bị 403, thử lại không kèm credentials...');
+                res = await fetch(msg.url);
+              }
+            } catch {
+              res = await fetch(msg.url);
+            }
           }
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const ct = (res.headers.get('content-type') || '').toLowerCase();
@@ -802,10 +813,20 @@
       (async () => {
         try {
           log.info('Đang tải video blob qua session trang web...', msg.url);
-          let res = await fetch(msg.url, { credentials: 'include' });
-          if (!res.ok && res.status === 403) {
-            log.warn('Fetch kèm credentials bị 403, thử lại không kèm credentials...');
+          const isYt = /googlevideo\.com|youtube\.com/i.test(msg.url);
+          let res;
+          if (isYt) {
             res = await fetch(msg.url);
+          } else {
+            try {
+              res = await fetch(msg.url, { credentials: 'include' });
+              if (!res.ok && res.status === 403) {
+                log.warn('Fetch kèm credentials bị 403, thử lại không kèm credentials...');
+                res = await fetch(msg.url);
+              }
+            } catch {
+              res = await fetch(msg.url);
+            }
           }
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const ct = (res.headers.get('content-type') || '').toLowerCase();

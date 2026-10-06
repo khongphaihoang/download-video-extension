@@ -22,7 +22,10 @@ function getYtScore(item) {
   if (!item) return 0;
   let score = 0;
   const meta = item.ytMeta || {};
+  const url = item.url || '';
   if (meta.isAudio) return 100;
+  // Link Android/Resolved đã được giải mã signature và không bị lỗi 403 được ưu tiên cao nhất
+  if (meta.resolved || url.includes('c=ANDROID')) score += 20000000;
   if (item.kind === 'file') score += 5000000;
   const h = Number(meta.height) || Number(item.height) || 0;
   if (h > 0) score += h * 10000;
@@ -61,14 +64,17 @@ export function filterAndDedupe(items, isYtTab) {
       }
 
       if (!existing.variants.some((v) => v.url === item.url)) {
-        existing.variants.push({
-          url: item.url,
-          label: item.label,
-          ytMeta: item.ytMeta,
-          score: getYtScore(item),
-        });
+        if (item.url && !item.url.includes('sabr=1')) {
+          existing.variants.push({
+            url: item.url,
+            label: item.label,
+            ytMeta: item.ytMeta,
+            score: getYtScore(item),
+          });
+        }
       }
 
+      existing.variants = existing.variants.filter((v) => v && v.url && !v.url.includes('sabr=1'));
       existing.variants.sort((a, b) => b.score - a.score);
 
       const best = existing.variants[0];
@@ -90,6 +96,7 @@ export function filterAndDedupe(items, isYtTab) {
           score: getYtScore(item),
         }];
       }
+      item.variants = item.variants.filter((v) => v && v.url && !v.url.includes('sabr=1'));
       byVideoId.set(key, item);
       result.push(item);
     }
@@ -110,13 +117,19 @@ export function parseItemInfo(item) {
   const variants = [];
   const seenUrls = new Set();
   for (const v of rawVariants) {
-    if (!v || !v.url || seenUrls.has(v.url)) continue;
+    if (!v || !v.url || seenUrls.has(v.url) || v.url.includes('sabr=1')) continue;
     seenUrls.add(v.url);
     const m = v.ytMeta || item.ytMeta || {};
-    let q = m.quality || (m.isAudio ? 'Audio' : item.kind === 'file' ? '720p' : 'Adaptive');
-    if (m.isAudio) q = 'Audio';
-    else if (/^[0-9]+$/.test(q)) q += 'p';
-    if (m.isLive) q += ' • Live';
+    let q = m.quality;
+    if (!q) {
+      if (m.isAudio) q = 'Audio';
+      else if (m.height > 0) q = `${m.height}p`;
+      else if (item.kind === 'file') q = 'MP4';
+      else q = 'Adaptive';
+    } else if (/^[0-9]+$/.test(q)) {
+      q += 'p';
+    }
+    if (m.isLive && !q.includes('Live')) q += ' • Live';
 
     variants.push({
       url: v.url,

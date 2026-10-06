@@ -212,8 +212,18 @@ async function fetchPreviewFromTab(targetTabId, mediaUrl) {
       target: { tabId: targetTabId },
       func: async (url) => {
         try {
-          let res = await fetch(url, { credentials: 'include' });
-          if (!res.ok && res.status === 403) res = await fetch(url);
+          const isYt = /googlevideo\.com|youtube\.com/i.test(url);
+          let res;
+          if (isYt) {
+            res = await fetch(url);
+          } else {
+            try {
+              res = await fetch(url, { credentials: 'include' });
+              if (!res.ok && res.status === 403) res = await fetch(url);
+            } catch {
+              res = await fetch(url);
+            }
+          }
           if (!res.ok) return { ok: false, error: 'HTTP ' + res.status };
           const ct = (res.headers.get('content-type') || '').toLowerCase();
           if (ct.includes('text/html')) return { ok: false, error: '403 HTML' };
@@ -795,8 +805,77 @@ function renderItem(item) {
 
   row.append(btnPreview, dl, cp);
 
-  li.append(header, qualitySelectorRow, fileNameRow, playerWrap, row);
+  const parts = [header, qualitySelectorRow];
+  if (info.platform === 'youtube') {
+    const vid = (item.ytMeta && item.ytMeta.videoId) || item.code || '';
+    if (/^[A-Za-z0-9_-]{11}$/.test(vid)) parts.push(buildHqRow(vid));
+  }
+  parts.push(fileNameRow, playerWrap, row);
+
+  li.append(...parts);
   return li;
+}
+
+const hqProgressHandlers = new Map();
+
+/** Hàng tải YouTube 480p–4K qua yt-dlp + ffmpeg (native host). */
+function buildHqRow(videoId) {
+  const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  const wrap = document.createElement('div');
+  wrap.className = 'quality-selector-row hq-row';
+
+  const label = document.createElement('span');
+  label.className = 'quality-selector-label';
+  label.textContent = 'Tải HQ:';
+
+  const select = document.createElement('select');
+  select.className = 'hq-select';
+  [['', 'Tốt nhất'], ['2160', '4K (2160p)'], ['1440', '2K (1440p)'], ['1080', '1080p'], ['720', '720p'], ['480', '480p']]
+    .forEach(([v, t]) => {
+      const o = document.createElement('option');
+      o.value = v;
+      o.textContent = t;
+      if (v === '1080') o.selected = true;
+      select.appendChild(o);
+    });
+
+  const btn = document.createElement('button');
+  btn.className = 'btn primary hq-btn';
+  btn.textContent = '⬇️ Tải (yt-dlp)';
+  btn.title = 'Tải hình + tiếng rồi ghép thành MP4 bằng yt-dlp + ffmpeg';
+
+  btn.addEventListener('click', async () => {
+    const height = select.value ? Number(select.value) : null;
+    btn.disabled = true;
+    select.disabled = true;
+    btn.textContent = 'Đang kiểm tra…';
+
+    const ping = await chrome.runtime.sendMessage({ type: 'popup:hq-ping' });
+    if (!ping || !ping.ok) {
+      setStatus((ping && ping.error) || 'Không liên lạc được native host', 'err');
+    } else if (!ping.ytdlp) {
+      setStatus('Chưa cài yt-dlp: winget install yt-dlp.yt-dlp', 'err');
+    } else if (!ping.ffmpeg) {
+      setStatus('Chưa cài ffmpeg: winget install Gyan.FFmpeg', 'err');
+    } else {
+      btn.textContent = 'Đang tải 0%';
+      setStatus('Đang tải bằng yt-dlp…');
+      hqProgressHandlers.set(watchUrl, (m) => {
+        if (m.percent != null) btn.textContent = `Đang tải ${Math.round(m.percent)}%`;
+        setStatus(`yt-dlp: ${m.percent != null ? m.percent.toFixed(1) + '%' : ''} ${m.speed || ''} ${m.eta ? '· còn ' + m.eta : ''}`);
+      });
+      const res = await chrome.runtime.sendMessage({ type: 'popup:hq-download', url: watchUrl, height });
+      hqProgressHandlers.delete(watchUrl);
+      if (res && res.ok) setStatus('Đã lưu: ' + res.file, 'ok');
+      else setStatus('Lỗi: ' + ((res && res.error) || 'không rõ'), 'err');
+    }
+    btn.disabled = false;
+    select.disabled = false;
+    btn.textContent = '⬇️ Tải (yt-dlp)';
+  });
+
+  wrap.append(label, select, btn);
+  return wrap;
 }
 
 /** Gửi lệnh tải, rồi kiểm tra lại xem Chrome có tải được thật không. */
@@ -972,6 +1051,11 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 
 // Tự động reload popup khi tab chuyển video (SPA pushState từ content.js)
 chrome.runtime.onMessage.addListener((msg) => {
+  if (msg && msg.type === 'hq:progress') {
+    const h = hqProgressHandlers.get(msg.url);
+    if (h) h(msg);
+    return;
+  }
   if (msg && msg.type === 'tab:url-changed' && msg.url) {
     currentTabUrl = msg.url;
     load();

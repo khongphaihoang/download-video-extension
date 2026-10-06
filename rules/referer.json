@@ -37,7 +37,7 @@
     },
     "condition": {
       "urlFilter": "||googlevideo.com",
-      "resourceTypes": ["media", "other", "object", "xmlhttprequest"]
+      "resourceTypes": ["main_frame", "sub_frame", "media", "other", "object", "xmlhttprequest"]
     }
   },
   {
@@ -222,6 +222,72 @@
     "condition": {
       "regexFilter": "^https?://(v[0-9]+[^/]*|webapp[^/]*)\\.tiktok\\.com/.*",
       "resourceTypes": ["main_frame", "sub_frame", "media", "other", "object", "xmlhttprequest"]
+    }
+  },
+  {
+    "id": 11,
+    "priority": 2,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {
+          "header": "User-Agent",
+          "operation": "set",
+          "value": "com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip"
+        },
+        {
+          "header": "X-YouTube-Client-Name",
+          "operation": "set",
+          "value": "3"
+        },
+        {
+          "header": "X-YouTube-Client-Version",
+          "operation": "set",
+          "value": "21.26.364"
+        },
+        {
+          "header": "Origin",
+          "operation": "set",
+          "value": "https://www.youtube.com"
+        }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||youtube.com/youtubei/v1/player*app=android*",
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  },
+  {
+    "id": 12,
+    "priority": 2,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {
+          "header": "User-Agent",
+          "operation": "set",
+          "value": "com.google.ios.youtube/21.26.4 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X; en_US)"
+        },
+        {
+          "header": "X-YouTube-Client-Name",
+          "operation": "set",
+          "value": "5"
+        },
+        {
+          "header": "X-YouTube-Client-Version",
+          "operation": "set",
+          "value": "21.26.4"
+        },
+        {
+          "header": "Origin",
+          "operation": "set",
+          "value": "https://www.youtube.com"
+        }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||youtube.com/youtubei/v1/player*app=ios*",
+      "resourceTypes": ["xmlhttprequest"]
     }
   }
 ]

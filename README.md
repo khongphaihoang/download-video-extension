@@ -1,194 +1,155 @@
-# Video Grabber
+# Video Grabber 🎬
 
-Extension Chrome/Edge/Cốc Cốc bắt mọi link video từ trang web đang mở — bao gồm video
-trong **group private trên Facebook**.
-
-Không cần cài Python, `yt-dlp` hay `ffmpeg`. Extension dùng chính session đăng nhập
-sẵn có của bạn, nên nội dung trong group kín truy cập được mà không cần xác thực thêm.
-
-## Cài đặt
-
-1. Mở `chrome://extensions` (Edge: `edge://extensions`, Cốc Cốc: `coccoc://extensions`)
-2. Bật **Developer mode** (góc trên phải)
-3. Bấm **Load unpacked** → chọn thư mục `f:\project\fb-video-grabber`
-4. Ghim extension lên thanh công cụ
-
-## Cách dùng
-
-### Trang web thông thường
-
-1. Mở trang có video
-2. **Bấm play** — extension chỉ thấy luồng dữ liệu khi video thực sự phát
-3. Bấm icon extension → danh sách link hiện ra → **Tải**
-
-### Facebook group private
-
-1. Mở bài viết trong group
-2. Bấm vào video để nó phát
-3. Mở popup → bấm **Quét sâu**
-4. Chọn link có nhãn `browser_native_hd_url` (chất lượng cao nhất) → **Tải**
-
-> Link fbcdn có chữ ký và **hết hạn sau khoảng 1–2 giờ**. Nếu tải bị lỗi 403,
-> bấm **Quét sâu** lại để lấy URL mới.
-
-### YouTube
-
-1. Mở video YouTube bất kỳ
-2. Đợi 1–2 giây để extension quét `ytInitialPlayerResponse`
-3. Mở popup — tab **⚡ Đang xem** (mặc định) hiển thị đúng video đang phát,
-   gắn nhãn **🔥 ĐANG XEM**, xếp lên đầu danh sách
-4. Sang tab **Tất cả** để xem toàn bộ link đã bắt:
-   - **file** (xanh) = progressive stream, có cả video+audio, tải trực tiếp
-   - **yt-adapt** (tím) = adaptive stream, chỉ hình hoặc chỉ tiếng
-5. **Luôn ưu tiên link `file`** (thường có 360p và 720p)
-6. Tải adaptive cần ghép bằng `ffmpeg` ngoài extension
-
-> **Cách extension biết video nào đang phát:** YouTube phát qua MSE nên
-> `video.src` luôn là `blob:` — không đọc được link thật từ thẻ `<video>`.
-> `inject.js` lấy `videoId` từ URL (`/watch?v=`, `/shorts/`, `/live/`), đối chiếu
-> với bảng `videoId → format progressive tốt nhất` dựng từ player response, rồi
-> mới gắn cờ `isCurrent` cho đúng link đó. Vì vậy link "Đang xem" luôn là bản
-> nét nhất và tải trực tiếp được.
-
-> ⚠️ **Vì sao tải YouTube hay lỗi 403 (và trước đây ra file `.txt`):**
-> URL trong `ytInitialPlayerResponse` có tham số `n` ở dạng **chưa giải mã** —
-> chính player phải biến đổi `n` rồi mới gọi được. Gọi thẳng URL thô sẽ bị googlevideo
-> trả `403` kèm `Content-Type: text/plain`, và Chrome lưu body rỗng đó thành `.txt`
-> (đánh dấu "hoàn tất", nên rất dễ tưởng là đã tải xong).
-> Vì vậy extension:
-> 1. **Kiểm tra trước** bằng `Range: bytes=0-1` (message `content:probe`); nếu server
->    từ chối thì báo lỗi rõ ràng thay vì tạo file rác.
-> 2. **Bắt link "live"** — URL `/videoplayback` mà chính player đã gọi, tức `n` đã
->    hợp lệ. Link này gắn nhãn `(live)` và tải được. Bỏ `range`/`rn` để lấy cả file;
->    luồng **SABR/UMP** (`sabr=1`) bị bỏ qua vì nội dung không phải file media thường.
->
-> Muốn có link live: **bấm Play cho video chạy** vài giây rồi mở popup. Nếu video chỉ
-> chạy qua SABR, extension sẽ không có link tải được — đây là giới hạn phía YouTube,
-> không phải lỗi extension.
-
-> Tốc độ tải YouTube có thể bị throttle (~50 KB/s). Đây là hạn chế phía server
-> của YouTube (n-parameter throttling), không phải lỗi extension.
-
-## Kiến trúc
-
-```mermaid
-flowchart TD
-    A["inject.js — MAIN world<br/>hook fetch / XHR / video.src"] -->|"window.postMessage"| B
-    P["PerformanceObserver<br/>buffer 20000"] --> B["content.js — isolated world<br/>gom + khử trùng lặp"]
-    D["quét DOM"] --> B
-    F["regex JSON Facebook"] --> B
-    B -->|"media:add"| C["background.js<br/>storage.session theo tabId"]
-    C -->|"popup:download"| E["chrome.downloads<br/>tự gắn cookie"]
-    G["popup.js<br/>+ panel chẩn đoán"] --> C
-```
-
-### Bốn nguồn phát hiện video
-
-| Nguồn | Bắt được gì |
-|---|---|
-| `inject.js` (MAIN world) | Hook `fetch`, `XMLHttpRequest.open`, `video.src` — bắt được luồng MSE/DASH mà 3 nguồn kia mù |
-| `inject.js` YouTube parser | Trích xuất `ytInitialPlayerResponse` + hook fetch `/youtubei/v1/player` (SPA) |
-| `PerformanceObserver` | Resource Timing, buffer đã nâng lên 20000 entry |
-| Quét DOM | `<video src>`, `<video><source>`, `<a href="*.mp4">` |
-| Regex JSON Facebook | `browser_native_hd_url`, `playable_url`, `hd_src`… nhúng trong `<script>` |
-
-Nguồn cuối là lý do group private hoạt động: dữ liệu đó chỉ đọc được vì content
-script chạy trong session đã đăng nhập của bạn.
-
-### Hai cái bẫy đã xử lý
-
-**1. Resource Timing buffer tràn.** Chrome mặc định chỉ giữ **250 entry**. Khi đầy,
-entry mới bị **vứt bỏ hoàn toàn** và `PerformanceObserver` không hề hay biết.
-Facebook nạp quá 250 tài nguyên trong vài giây → video phát sau đó mất trắng.
-Đã nâng lên 20000 kèm handler `resourcetimingbufferfull`.
-
-**2. `initiatorType` không phải `'video'`.** Facebook phát video qua MSE, player
-gọi `fetch()` bằng JS của chính nó → `initiatorType` là `'fetch'`. Chỉ hook
-`fetch`/XHR ở MAIN world mới bắt được.
-
-### Vì sao cần `rules/referer.json`
-
-`fbcdn.net` từ chối request không có `Referer: https://www.facebook.com/`.
-Rule `declarativeNetRequest` chèn header đó vào các request media trỏ tới fbcdn.
-
-## Phân loại link
-
-| Nhãn | Ý nghĩa | Tải được? |
-|---|---|---|
-| `file` | File video hoàn chỉnh (`.mp4`) — kể cả progressive YouTube | ✅ Tải trực tiếp |
-| `yt-adapt` | Adaptive YouTube (chỉ hình hoặc chỉ tiếng) | ⚠️ Cần ghép ffmpeg |
-| `hls` / `dash` | Manifest `.m3u8` / `.mpd` | ❌ Cần ghép segment |
-| `seg` | Một mảnh của luồng DASH | ❌ Vô dụng đơn lẻ |
-
-**Luôn ưu tiên link `file`.** Link `seg` là từng mảnh của video bị cắt nhỏ —
-tải một mảnh không cho bạn video hoàn chỉnh.
-
-## Giới hạn đã biết
-
-- **MV3 chỉ hỗ trợ Chrome/Edge/Cốc Cốc.** Firefox cần manifest khác
-  (`background.scripts` thay vì `service_worker`).
-- **Link `seg` không ghép được trong extension thuần.** Muốn ghép cần native host
-  chạy `yt-dlp` + `ffmpeg`.
-- Video **DRM** (Netflix, Disney+) không hỗ trợ và sẽ không được hỗ trợ.
-- Facebook giới hạn tải nhanh liên tục — rải request ra, đừng tải hàng loạt.
-- **YouTube progressive** thường chỉ có tối đa 720p (hạn chế của YouTube).
-- **YouTube throttling:** tốc độ tải có thể bị giới hạn ~50 KB/s do n-parameter.
-- Một số video YouTube có `signatureCipher` thay vì URL trực tiếp — extension không giải mã được.
-
-## Cấu trúc
-
-```
-download-video-extension/
-├── manifest.json          # MV3, service worker + content scripts
-├── rules/
-│   └── referer.json       # DNR: thêm Referer cho fbcdn.net, googlevideo, instagram
-└── src/
-    ├── social/            # Tách riêng source code theo từng mạng xã hội
-    │   ├── fb/            # Facebook: inject, content, background, popup
-    │   ├── ig/            # Instagram: inject, content, background, popup
-    │   └── ytb/           # YouTube: inject, content, background, popup
-    ├── inject.js          # MAIN world orchestrator: hook fetch / XHR / video.src
-    ├── content.js         # isolated world orchestrator: gom nguồn, khử trùng lặp
-    ├── background.js      # Service worker: lưu trữ theo tab, gọi chrome.downloads
-    ├── popup.html
-    ├── popup.css
-    └── popup.js
-```
-
-## Công cụ Debug mạnh mẽ (Mới)
-
-### 1. Nút Reload 1-Click ngay trong Popup
-Không cần phải mở tab `chrome://extensions` để reload extension thủ công:
-- Mở popup extension → mở rộng **🛠️ Chẩn đoán & Debug** → bấm **[🔄 Reload Ext & Tab]**.
-- Extension sẽ tự nạp lại mã nguồn mới nhất và tự F5 tab web đang mở.
-
-### 2. Live Logs & Đèn tín hiệu trong Popup
-- **Đèn tín hiệu:** Kiểm tra tức thì trạng thái của Content Script và Inject Script (`✓ OK` hoặc `✗ Chưa chạy`).
-- **Live Logs:** Xem trực tiếp 25 sự kiện gần nhất (link nào vừa được **[BẮT]**, link nào bị **[LOẠI]** kèm lý do cụ thể như: *DASH segment, host scontent ảnh, manifest...*).
-- **[📋 Copy Log]:** 1-click copy toàn bộ thông số chẩn đoán và danh sách URL vào clipboard để báo lỗi hoặc kiểm tra.
-
-### 3. Log Console có màu sắc riêng biệt (F12)
-Mở Console (F12) trên trang web, logs được gán nhãn và màu sắc rõ ràng (không bị ẩn trong verbose):
-- `[VG:Inject]` (Màu tím): Bắt đầu hook fetch, XHR, DOM gán src, bắt player response YouTube.
-- `[VG:Content]` (Màu xanh lá): Gom luồng, lọc URL, phân loại format, gửi lên Background.
-- `[VG:Background]` (Màu xanh dương): Lưu trữ session, điều khiển tải file download.
-
-### 4. Lệnh nhanh trực tiếp trong Console (`window.__VG__`)
-Trên bất kỳ trang web nào, mở F12 Console và gõ:
-- `__VG__.status()`: Xem bảng tổng kết trạng thái (Observer, bộ đếm các nguồn, số link bị loại).
-- `__VG__.items`: Lấy mảng toàn bộ video đã bắt được.
-- `__VG__.logs`: Xem lịch sử log sự kiện chi tiết gần nhất.
-- `__VG__.scan()`: Ép extension quét lại toàn bộ trang ngay lập tức.
-- `__VG__.test("https://...")`: Kiểm tra nhanh xem 1 URL bất kỳ có hợp lệ không, bị reject vì sao, hoặc phân loại là gì.
+**Video Grabber** là tiện ích mở rộng (Chrome Extension Manifest V3) mạnh mẽ dành cho các trình duyệt Chromium (Google Chrome, Microsoft Edge, Cốc Cốc, Brave), giúp tự động phát hiện, bắt luồng và tải video từ hầu hết các trang web — đặc biệt hỗ trợ chuyên sâu cho **YouTube**, **Facebook (kể cả Group kín)**, **TikTok** và **Instagram**.
 
 ---
 
-## Bảng chẩn đoán lỗi thường gặp
+## ✨ Tính năng nổi bật
 
-| Chẩn đoán hiện | Nghĩa là | Cách khắc phục |
-|---|---|---|
-| `✗ CONTENT SCRIPT KHÔNG PHẢN HỒI` | Script chưa inject vào trang | Bấm **[🔄 Reload Ext & Tab]** |
-| `Observer: ✗ KHÔNG TẠO ĐƯỢC` | Trình duyệt không hỗ trợ Resource Timing | Nâng cấp trình duyệt Chromium |
-| `inject.js: ✗ MAIN world chưa chạy` | MAIN world script bị chặn hoặc chưa nạp | Bấm Reload Ext & Tab |
-| `Content script sống` + `0 URL` | Script hoạt động tốt nhưng chưa thấy dữ liệu | Bấm **Play** video để trình duyệt tải luồng |
-| `bị loại` tăng cao | Các request là segment (.m4s, .ts) hoặc ảnh | Xem chi tiết trong mục Live Logs |
+- ⚡ **Bắt luồng theo thời gian thực:** Hook trực tiếp các luồng phát MSE (Media Source Extensions), DASH, HLS và thẻ video HTML5 ngay khi video bắt đầu chạy.
+- ▶️ **YouTube (Đầy đủ mọi độ phân giải):**
+  - **Tải nhanh (360p / 480p Shorts):** Tải trực tiếp qua trình duyệt với đầy đủ âm thanh và hình ảnh, không cần cài đặt thêm phần mềm nào.
+  - **Tải chất lượng cao HQ (480p, 720p, 1080p, 2K, 4K):** Tích hợp Native Host tự động điều khiển `yt-dlp` và `ffmpeg` tải và ghép luồng hình + tiếng thành file MP4 hoàn chỉnh.
+- 🔵 **Facebook (Hỗ trợ Group Private / Nhóm kín):**
+  - Tải Reels, Watch, bài viết cá nhân và video trong nhóm kín.
+  - Tận dụng chính phiên đăng nhập (session) của bạn trên trình duyệt, không yêu cầu cấp quyền hay nhập tài khoản/mật khẩu.
+- 🎵 **TikTok:** Cơ chế tải thông minh vượt qua các hạn chế chống tải trực tiếp và lỗi 403 Forbidden của CDN Akamai.
+- 📸 **Instagram:** Bắt nhanh Reels, Post video và Story.
+- 👁️ **Xem thử trực tiếp (Preview):** Phát video xem trước ngay trong Popup trước khi quyết định tải về.
+- 🛠️ **Bộ công cụ chẩn đoán & Debug tích hợp:**
+  - Nút **[🔄 Reload Ext & Tab]** 1-click giúp nạp lại mã nguồn mới mà không cần vào `chrome://extensions`.
+  - Đèn trạng thái kết nối và Live Logs ghi nhận 25 sự kiện mạng gần nhất.
+  - 1-click sao chép báo cáo chẩn đoán (Diagnostic Report) để kiểm tra lỗi.
+
+---
+
+## 🚀 Hướng dẫn cài đặt
+
+### 1. Cài đặt Extension vào trình duyệt
+
+1. Tải hoặc clone mã nguồn extension về máy tính.
+2. Mở trang quản lý tiện ích trên trình duyệt:
+   - Chrome: `chrome://extensions`
+   - Edge: `edge://extensions`
+   - Cốc Cốc: `coccoc://extensions`
+3. Bật công tắc **Developer mode** (Chế độ dành cho nhà phát triển) ở góc trên bên phải.
+4. Bấm **Load unpacked** (Tải tiện ích đã giải nén) → chọn thư mục mã nguồn extension này.
+5. Ghim icon **Video Grabber** lên thanh công cụ trình duyệt để tiện sử dụng.
+6. **Lưu ý:** Ghi nhớ hoặc copy chuỗi **ID** của extension (ví dụ: `dhmmcdjieldakilcgkojlcgmobeiddfg`) hiển thị trên thẻ extension.
+
+---
+
+### 2. Cài đặt Native Host (Tùy chọn — Dùng để tải YouTube 1080p, 2K, 4K)
+
+> [!NOTE]
+> Nếu bạn chỉ cần tải video Facebook, TikTok, Instagram và YouTube ở độ phân giải 360p, bạn **không cần** thực hiện bước này.
+> Nếu muốn tải YouTube ở độ phân giải cao (**720p, 1080p, 2K, 4K**), hãy chạy lệnh bên dưới một lần duy nhất.
+
+1. Mở cửa sổ **PowerShell** tại thư mục `native-host` của dự án:
+   ```powershell
+   cd native-host
+   .\install.ps1 -ExtensionId <ID_EXTENSION_CỦA_BẠN> -InstallDeps
+   ```
+   *Ví dụ:*
+   ```powershell
+   .\install.ps1 -ExtensionId dhmmcdjieldakilcgkojlcgmobeiddfg -InstallDeps
+   ```
+   *(Tham số `-InstallDeps` sẽ tự động tải và cài đặt `yt-dlp` và `ffmpeg` qua Windows Package Manager `winget` nếu máy chưa có).*
+2. Vào `chrome://extensions` bấm nút **🔄 Reload** lại extension.
+
+---
+
+## 📖 Hướng dẫn sử dụng
+
+### 1. YouTube
+
+1. Mở video hoặc Shorts trên YouTube.
+2. Bấm icon extension trên thanh công cụ.
+3. **Lựa chọn cách tải:**
+   - **Tải nhanh (360p / 480p Shorts):** Bấm nút **⬇️ Tải** màu xanh để tải ngay qua trình duyệt (đầy đủ âm thanh & hình ảnh).
+   - **Tải chất lượng cao (480p – 4K):** Chọn độ phân giải mong muốn tại hàng **Tải HQ:** (ví dụ: `1080p`, `4K`) rồi bấm nút **⬇️ Tải (yt-dlp)**. File hoàn chỉnh sẽ tự động được lưu vào thư mục `Downloads`.
+
+### 2. Facebook (Video công khai & Group kín)
+
+1. Mở bài viết có video hoặc mở nhóm kín Facebook.
+2. Bấm **Play** để video phát (extension cần video phát để nhận diện luồng).
+3. Mở popup extension:
+   - Nếu video chưa xuất hiện ngay, bấm nút **Quét sâu** để extension phân tích mã nguồn HTML và JSON nhúng.
+   - Chọn chất lượng HD/SD tương ứng rồi bấm **⬇️ Tải**.
+
+### 3. TikTok & Instagram
+
+1. Mở video TikTok hoặc Reel Instagram.
+2. Bấm vào icon extension → danh sách link tải sẽ hiển thị.
+3. Bấm **👁️ Xem thử** để xem video trước, hoặc bấm **⬇️ Tải** để lưu về máy.
+
+### 4. Các trang web xem phim, tin tức khác
+
+1. Bật phát video trên trang web.
+2. Mở popup extension → chọn file video `.mp4` hoặc luồng stream tương ứng trong danh sách để tải.
+
+---
+
+## 🏗️ Kiến trúc & Nguyên lý hoạt động
+
+```mermaid
+flowchart TD
+    subgraph Browser Context
+        A["inject.js (MAIN World)<br/>Hook fetch, XHR, video.src, YouTube Innertube"] -->|"window.postMessage"| B["content.js (Isolated World)<br/>Lọc URL, quét DOM, phân tích JSON"]
+        P["PerformanceObserver<br/>Giám sát mạng buffer lớn"] --> B
+        B -->|"chrome.runtime.sendMessage"| C["background.js (Service Worker)<br/>Lưu trữ theo Tab, quản lý tải"]
+        D["rules/referer.json<br/>DNR: Tự gắn Referer & User-Agent"] -.-> C
+    end
+
+    subgraph User Interface
+        E["popup.js / popup.html<br/>Giao diện hiển thị, chọn chất lượng, Preview"] <--> C
+    end
+
+    subgraph Native Host (Tùy chọn)
+        C -->|"Native Messaging<br/>(stdio)"| F["vg_host.py (Python Host)<br/>Điều khiển yt-dlp + ffmpeg"]
+        F --> G["Tải & Ghép luồng 1080p/4K<br/>Lưu trực tiếp vào Downloads"]
+    end
+```
+
+### Cấu trúc mã nguồn
+
+```
+download-video-extension/
+├── manifest.json              # Khai báo quyền Manifest V3, Service Worker, Content Scripts
+├── rules/
+│   └── referer.json           # DNR Rules: Tự động gắn Referer/Origin cho fbcdn, googlevideo, tiktok
+├── native-host/               # Module Native Messaging hỗ trợ tải YouTube HQ
+│   ├── install.ps1            # Script tự động đăng ký host vào Registry & cài đặt dependencies
+│   ├── vg_host.py             # Python Host giao tiếp với extension qua stdin/stdout
+│   └── vg_host.bat            # File batch trung gian khởi chạy Python trên Windows
+└── src/
+    ├── background.js          # Service Worker điều phối tải file, lưu session và gọi Native Host
+    ├── content.js             # Content Script gom nguồn, phân tích DOM và gửi dữ liệu lên background
+    ├── inject.js              # MAIN World Script hook network, bắt luồng MSE/DASH
+    ├── popup.html             # Giao diện Popup extension
+    ├── popup.css              # Giao diện Dark-mode, thiết kế responsive
+    ├── popup.js               # Logic điều khiển giao diện Popup, Preview, chất lượng
+    └── social/                # Các module xử lý chuyên biệt theo từng nền tảng
+        ├── fb/                # Xử lý Facebook (Parser JSON, Group private, Reels)
+        ├── ig/                # Xử lý Instagram (Post, Reels, Story)
+        ├── tiktok/            # Xử lý TikTok (Bypass CORS, tải qua Tab blob)
+        └── ytb/               # Xử lý YouTube (Innertube Android API, bộ lọc SABR, HQ)
+```
+
+---
+
+## ❓ Xử lý sự cố thường gặp (Troubleshooting)
+
+| Hiện tượng | Nguyên nhân | Cách khắc phục |
+| :--- | :--- | :--- |
+| **Báo lỗi `Chưa cài native host` khi tải HQ** | Chưa đăng ký script vào Registry hoặc ID extension bị thay đổi. | Chạy lại lệnh `.\install.ps1 -ExtensionId <ID_CỦA_BẠN>` trong thư mục `native-host`. |
+| **YouTube chỉ thấy chất lượng 360p** | YouTube phân phối các bản 720p, 1080p, 4K dưới dạng luồng hình câm tách biệt (DASH). | Sử dụng nút **Tải HQ (yt-dlp)** ở ngay bên dưới để tải bản 1080p hoặc 4K có tiếng. |
+| **Video Facebook trong nhóm kín tải bị 403** | Token hoặc link của CDN Facebook đã hết hạn sau 1–2 giờ. | Mở lại bài viết trên Facebook, bấm nút **Quét sâu** trong popup để lấy link mới. |
+| **Popup hiển thị `Chưa bắt được video nào`** | Video chưa được phát hoặc content script chưa nạp kịp. | Bấm **Play** video, sau đó bấm mở mục **🛠️ Chẩn đoán & Debug** → chọn **[🔄 Reload Ext & Tab]**. |
+| **TikTok báo lỗi tải về máy** | Trình duyệt chặn tải trực tiếp từ CDN Akamai do CORS. | Extension sẽ tự động chuyển sang tải ngầm qua blob trong tab, hãy đợi vài giây để file được lưu. |
+
+---
+
+## 📄 Bản quyền & Giấy phép
+
+Dự án được phát triển nhằm mục đích học tập, nghiên cứu kỹ thuật và sao lưu dữ liệu cá nhân hợp pháp. Vui lòng tôn trọng quyền sở hữu trí tuệ và điều khoản dịch vụ của các nền tảng nội dung.
