@@ -44,9 +44,9 @@
   const MEDIA_EXT_RE = /\.(mp4|m4v|m4s|webm|mkv|mov|avi|flv|m3u8|mpd|ts|f4v)(\?|#|$)/i;
 
   const MEDIA_HOST_RE =
-    /(^|\.)(video[^.]*\.fbcdn\.net|scontent[^.]*\.fbcdn\.net|cdninstagram\.com|googlevideo\.com|video\.twimg\.com|vimeocdn\.com|tiktokcdn\.com|tiktokcdn-us\.com|akamaized\.net|cloudfront\.net|mux\.com|bunnycdn\.com|streamable\.com|dailymotion\.com|viddler\.com|jwplayer\.com|brightcove\.net|kaltura\.com)$/i;
+    /(^|\.)(video[^.]*\.fbcdn\.net|scontent[^.]*\.fbcdn\.net|cdninstagram\.com|googlevideo\.com|video\.twimg\.com|vimeocdn\.com|tiktokcdn\.com|tiktokcdn-us\.com|byteoversea\.com|ibytedtos\.com|(v[0-9]+[^.]*|webapp[^.]*)\.tiktok\.com|akamaized\.net|cloudfront\.net|mux\.com|bunnycdn\.com|streamable\.com|dailymotion\.com|viddler\.com|jwplayer\.com|brightcove\.net|kaltura\.com)$/i;
 
-  const BAD_EXT_RE = /\.(jpe?g|png|gif|webp|svg|css|js|mjs|woff2?|ttf|ico|map)(\?|#|$)/i;
+  const BAD_EXT_RE = /\.(jpe?g|png|gif|webp|avif|heic|svg|css|js|mjs|woff2?|ttf|ico|map|json)(\?|#|$)/i;
   const MAX_SCAN_CHARS = 4 * 1024 * 1024;
 
   // Lấy các module social đã đăng ký
@@ -133,7 +133,9 @@
       }
 
       const hasMediaExt = MEDIA_EXT_RE.test(url);
-      const isRecognizedPath = /\/(?:o1\/v\/|v\/t[0-9])/i.test(url);
+      const isRecognizedPath = /\/(?:o1\/v\/|v\/t[0-9])/i.test(url)
+        || /\/(?:video\/tos|video\/mime|play)/i.test(url)
+        || /mime_type=video_mp4/i.test(url);
 
       if (!hasMediaExt && !acceptedByModule && !isRecognizedPath) return false;
 
@@ -190,16 +192,16 @@
     lastActiveVideoTime = Date.now();
     lastActiveVideoEl = videoEl;
 
-    const isSingleVideoUrl = /(?:\/reel\/|\/reels\/|\/watch|\/videos\/)/i.test(location.pathname)
+    const isSingleVideoUrl = /(?:\/reel\/|\/reels\/|\/watch|\/videos\/|\/video\/|\/v\/|\/photo\/)/i.test(location.pathname)
       || /[?&]v=[0-9]+/i.test(location.search);
 
     let href = location.href;
     if (!isSingleVideoUrl) {
       const container =
-        videoEl.closest('article, [role="dialog"], div[role="feed"] > div') ||
+        videoEl.closest('article, [role="dialog"], [data-e2e="recommend-list-item-container"], div[role="feed"] > div') ||
         videoEl.parentElement;
       const link = container
-        ? container.querySelector('a[href*="/reel/"], a[href*="/reels/"], a[href*="/p/"], a[href*="/videos/"]')
+        ? container.querySelector('a[href*="/reel/"], a[href*="/reels/"], a[href*="/p/"], a[href*="/videos/"], a[href*="/video/"]')
         : null;
       if (link && link.href) href = link.href;
     }
@@ -359,6 +361,21 @@
 
   // Lắng nghe thay đổi URL khi cuộn Reels / chuyển video SPA (pushState, replaceState, popstate)
   function onUrlChange() {
+    try {
+      window.postMessage({
+        __videoGrabber: true,
+        via: 'url-change',
+        url: location.href,
+      }, '*');
+    } catch { /* ignore */ }
+
+    for (const m of activeModules) {
+      if (typeof m.onUrlChange === 'function') {
+        try { m.onUrlChange(location.href, moduleContext); }
+        catch { /* ignore */ }
+      }
+    }
+
     setTimeout(() => {
       const activeVideo =
         document.querySelector('video:not([paused])') ||

@@ -11,8 +11,9 @@
 import * as fb from './social/fb/background.js';
 import * as ig from './social/ig/background.js';
 import * as ytb from './social/ytb/background.js';
+import * as tiktok from './social/tiktok/background.js';
 
-const socialModules = [ytb, ig, fb];
+const socialModules = [ytb, ig, fb, tiktok];
 
 // Logger tiện ích cho background script
 const log = {
@@ -171,6 +172,13 @@ async function downloadOne(item, index, total, tabId) {
     return { ok: false, url, error: probeCheck.error };
   }
 
+  // Cho phép module xử lý download đặc thù (VD: TikTok cần tải qua tab session để tránh bị CDN Akamai trả về 403 HTML)
+  for (const module of socialModules) {
+    if (typeof module.handleDownload !== 'function') continue;
+    const handled = await module.handleDownload(item, filename, tabId, log);
+    if (handled) return handled;
+  }
+
   try {
     log.info(`Đang tải (${index + 1}/${total}): ${filename}`, url);
     const id = await chrome.downloads.download({
@@ -183,7 +191,24 @@ async function downloadOne(item, index, total, tabId) {
     return { ok: true, id, url };
   } catch (err) {
     const errorMsg = String((err && err.message) || err);
-    log.err(`Tải thất bại (${filename}): ${errorMsg}`, url);
+    log.warn(`chrome.downloads thất bại (${filename}): ${errorMsg}. Thử fallback tải qua tab...`, url);
+
+    if (tabId != null) {
+      try {
+        const fallbackRes = await chrome.tabs.sendMessage(tabId, {
+          type: 'content:download-blob',
+          url,
+          filename,
+        });
+        if (fallbackRes && fallbackRes.ok) {
+          log.info(`Tải fallback thành công qua tab cho: ${filename}`);
+          return { ok: true, id: 'tab-blob', url };
+        }
+      } catch (fbErr) {
+        log.err(`Tải fallback qua tab cũng thất bại:`, fbErr);
+      }
+    }
+
     return { ok: false, url, error: errorMsg };
   }
 }
@@ -211,6 +236,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.type === 'popup:clear') {
     log.info(`Xoá danh sách tab ${msg.tabId}`);
+    chrome.tabs.sendMessage(msg.tabId, { type: 'content:clear' }).catch(() => { });
     chrome.storage.session.remove(keyFor(msg.tabId)).then(() => {
       updateBadge(msg.tabId, 0);
       sendResponse({ ok: true });
@@ -254,13 +280,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 // --------------------------------------------- dọn dữ liệu khi điều hướng
+const tabOrigins = new Map();
 
-chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (changeInfo.url || changeInfo.status === 'loading') {
-    chrome.storage.session.remove(keyFor(tabId)).then(() => updateBadge(tabId, 0));
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  // Chỉ dọn dữ liệu nếu tab chuyển hẳn sang website / origin khác (ví dụ: từ tiktok.com sang google.com)
+  if (changeInfo.url) {
+    try {
+      const newOrigin = new URL(changeInfo.url).origin;
+      const oldOrigin = tabOrigins.get(tabId);
+      if (oldOrigin && oldOrigin !== newOrigin) {
+        log.info(`[Tab ${tabId}] Chuyển origin từ ${oldOrigin} sang ${newOrigin} -> dọn storage`);
+        chrome.storage.session.remove(keyFor(tabId)).then(() => updateBadge(tabId, 0));
+      }
+      tabOrigins.set(tabId, newOrigin);
+    } catch { /* ignore */ }
+  } else if (changeInfo.status === 'loading' && tab && tab.url) {
+    try {
+      tabOrigins.set(tabId, new URL(tab.url).origin);
+    } catch { /* ignore */ }
   }
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
+  tabOrigins.delete(tabId);
   chrome.storage.session.remove(keyFor(tabId));
 });

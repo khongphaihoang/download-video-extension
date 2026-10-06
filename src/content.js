@@ -23,10 +23,10 @@
   } catch { /* ignore */ }
 
   const FILE_RE = /\.(mp4|m4v|webm|mkv|mov|avi|flv|f4v)(\?|#|$)/i;
-  const BAD_RE = /\.(jpe?g|png|gif|webp|svg|css|js|mjs|woff2?|ttf|ico|json|map|m3u8|mpd|ts|m4s)(\?|#|$)/i;
+  const BAD_RE = /\.(jpe?g|png|gif|webp|avif|heic|svg|css|js|mjs|woff2?|ttf|ico|json|map|m3u8|mpd|ts|m4s)(\?|#|$)/i;
 
   const MEDIA_HOST_RE =
-    /(^|\.)(video[^.]*\.fbcdn\.net|scontent[^.]*\.fbcdn\.net|cdninstagram\.com|googlevideo\.com|video\.twimg\.com|vimeocdn\.com|tiktokcdn\.com|tiktokcdn-us\.com|akamaized\.net|cloudfront\.net|mux\.com|bunnycdn\.com|streamable\.com|dailymotion\.com|jwplayer\.com|brightcove\.net|kaltura\.com)$/i;
+    /(^|\.)(video[^.]*\.fbcdn\.net|scontent[^.]*\.fbcdn\.net|cdninstagram\.com|googlevideo\.com|video\.twimg\.com|vimeocdn\.com|tiktokcdn\.com|tiktokcdn-us\.com|byteoversea\.com|ibytedtos\.com|(v[0-9]+[^.]*|webapp[^.]*)\.tiktok\.com|akamaized\.net|cloudfront\.net|mux\.com|bunnycdn\.com|streamable\.com|dailymotion\.com|jwplayer\.com|brightcove\.net|kaltura\.com)$/i;
 
   // Logger
   const log = {
@@ -199,9 +199,11 @@
     }
 
     const hasMediaExt = FILE_RE.test(url);
-    const isRecognizedPath = /\/(?:o1\/v\/|v\/t[0-9])/i.test(url);
-    const looksMedia = hasMediaExt || isRecognizedPath || source === 'fb-json' || source === 'ig-json'
-      || (typeof source === 'string' && (source.startsWith('inject:fb-') || source.startsWith('inject:ig-')))
+    const isRecognizedPath = /\/(?:o1\/v\/|v\/t[0-9])/i.test(url)
+      || /\/(?:video\/tos|tos-[a-z0-9-]+|video\/mime|play|aweme\/v1\/play)/i.test(url)
+      || /mime_type=video_mp4/i.test(url);
+    const looksMedia = hasMediaExt || isRecognizedPath || source === 'fb-json' || source === 'ig-json' || source === 'tt-json'
+      || (typeof source === 'string' && (source.startsWith('inject:fb-') || source.startsWith('inject:ig-') || source.startsWith('inject:tt-')))
       || isFromSocialPlugin;
 
     if (!looksMedia) {
@@ -323,6 +325,7 @@
 
   // ------------------------------- nhận message từ MAIN world (inject.js)
   let injectAlive = false;
+  let handleUrlChange = null;
 
   window.addEventListener('message', (e) => {
     if (e.source !== window) return;
@@ -354,6 +357,13 @@
       injectAlive = true;
       log.info('Đã kết nối với inject.js (MAIN world)');
       addLog('system', 'inject', 'MAIN world script đã kết nối', {});
+      return;
+    }
+
+    if (d.via === 'url-change') {
+      if (typeof handleUrlChange === 'function') {
+        handleUrlChange(d.url);
+      }
       return;
     }
 
@@ -401,6 +411,7 @@
   // ------------------------------------------------------- nguồn Mạng (Perf)
   function considerPerfEntry(name, initiatorType) {
     if (!name) return;
+    if (initiatorType === 'img' || initiatorType === 'image' || initiatorType === 'css' || initiatorType === 'script' || initiatorType === 'font') return;
     const host = hostOf(name);
 
     if (MEDIA_HOST_RE.test(host)) {
@@ -462,11 +473,13 @@
   // ------------------------------------ theo dõi video đang phát / lướt tới
   function extractPostInfo(el) {
     if (!el) return { title: null, pageUrl: null, poster: null };
-    const isSingleVideoUrl = /(?:\/reel\/|\/reels\/|\/watch|\/videos\/|\/posts\/|\/p\/)/i.test(location.pathname)
+    const isSingleVideoUrl = /(?:\/reel\/|\/reels\/|\/watch|\/videos\/|\/posts\/|\/p\/|\/video\/|\/v\/|\/photo\/)/i.test(location.pathname)
       || /[?&]v=[0-9]+/i.test(location.search);
 
     const container =
       el.closest('div[style*="scroll-snap-align"]') ||
+      el.closest('[data-e2e="recommend-list-item-container"]') ||
+      el.closest('div[id*="xgwrapper"]') ||
       el.closest('div[data-video-id]') ||
       el.closest('article') ||
       el.closest('[role="dialog"]') ||
@@ -479,13 +492,19 @@
     const poster = el.poster || null;
 
     if (container) {
-      const textEl = container.querySelector('h1, h2, [dir="auto"], span[dir="auto"], p');
-      if (textEl && textEl.textContent.trim().length > 3) {
-        title = textEl.textContent.trim().slice(0, 100);
+      const ttDesc = container.querySelector('[data-e2e="browse-video-desc"], [data-e2e="user-title"], [data-e2e="video-desc"]');
+      if (ttDesc && ttDesc.textContent.trim().length > 2) {
+        title = ttDesc.textContent.trim().slice(0, 100);
+      }
+      if (!title) {
+        const textEl = container.querySelector('h1, h2, [dir="auto"], span[dir="auto"], p');
+        if (textEl && textEl.textContent.trim().length > 3) {
+          title = textEl.textContent.trim().slice(0, 100);
+        }
       }
       if (!pageUrl) {
         const linkEl = container.querySelector(
-          'a[href*="/reel/"], a[href*="/reels/"], a[href*="/p/"], a[href*="/videos/"], a[href*="/watch"], a[href*="?v="], a[href*="/posts/"], a[href*="story_fbid="], a[href*="/share/v/"], a[href*="/share/r/"]'
+          'a[href*="/reel/"], a[href*="/reels/"], a[href*="/p/"], a[href*="/videos/"], a[href*="/watch"], a[href*="?v="], a[href*="/posts/"], a[href*="story_fbid="], a[href*="/share/v/"], a[href*="/share/r/"], a[href*="/video/"]'
         );
         if (linkEl && linkEl.href) {
           pageUrl = linkEl.href;
@@ -596,6 +615,65 @@
 
     document.addEventListener('visibilitychange', scanAll);
     window.addEventListener('pagehide', flush, true);
+
+    let lastContentUrl = location.href;
+    handleUrlChange = function (newUrl) {
+      const targetUrl = newUrl || location.href;
+      if (targetUrl === lastContentUrl) return;
+      const oldUrl = lastContentUrl;
+      lastContentUrl = targetUrl;
+      log.info('URL trang thay đổi (SPA navigation):', { from: oldUrl, to: lastContentUrl });
+
+      try {
+        chrome.runtime.sendMessage({
+          type: 'tab:url-changed',
+          url: targetUrl,
+        }).catch(() => {});
+      } catch { /* ignore */ }
+
+      // Khi chuyển video trên trang single video (TikTok, Reels, Watch):
+      // Đặt tất cả item cũ isCurrent = false và đánh dấu _needsUpdate để background cập nhật
+      let changedOld = false;
+      for (const it of items.values()) {
+        if (it.isCurrent) {
+          it.isCurrent = false;
+          it._needsUpdate = true;
+          changedOld = true;
+        }
+      }
+      if (changedOld) scheduleFlush();
+
+      scanAll();
+
+      let newCode = null;
+      for (const m of Object.values(socialModules)) {
+        if (typeof m.matchVideoCode === 'function') {
+          newCode = m.matchVideoCode(targetUrl);
+          if (newCode) break;
+        }
+      }
+
+      window.postMessage({
+        __videoGrabberAction: 'resolveVideo',
+        code: newCode,
+        pageUrl: targetUrl,
+        title: document.title,
+      }, '*');
+    };
+
+    window.addEventListener('popstate', handleUrlChange);
+    const origPush = history.pushState;
+    history.pushState = function () {
+      const res = origPush.apply(this, arguments);
+      setTimeout(handleUrlChange, 100);
+      return res;
+    };
+    const origReplace = history.replaceState;
+    history.replaceState = function () {
+      const res = origReplace.apply(this, arguments);
+      setTimeout(handleUrlChange, 100);
+      return res;
+    };
   }
 
   boot();
@@ -659,11 +737,20 @@
       return true;
     }
 
+    if (msg.type === 'content:clear') {
+      items.clear();
+      sent.clear();
+      sendResponse({ ok: true });
+      return true;
+    }
+
     if (msg.type === 'content:probe') {
       (async () => {
         try {
+          const isTt = /tiktok/i.test(msg.url);
+          const headers = isTt ? {} : { Range: 'bytes=0-1' };
           const res = await fetch(msg.url, {
-            headers: { Range: 'bytes=0-1' },
+            headers,
             credentials: 'include',
           });
           sendResponse({
@@ -673,6 +760,74 @@
           });
         } catch (err) {
           sendResponse({ ok: false, status: 0, error: String(err) });
+        }
+      })();
+      return true;
+    }
+
+    if (msg.type === 'content:preview-media') {
+      if (window.top !== window) return undefined;
+      (async () => {
+        try {
+          log.info('Đang nạp video xem thử qua session trang web...', msg.url);
+          let res = await fetch(msg.url, { credentials: 'include' });
+          if (!res.ok && res.status === 403) {
+            log.warn('Fetch xem thử kèm credentials bị 403, thử lại không kèm credentials...');
+            res = await fetch(msg.url);
+          }
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const ct = (res.headers.get('content-type') || '').toLowerCase();
+          if (ct.includes('text/html')) {
+            throw new Error('Máy chủ từ chối phát video (403)');
+          }
+          const blob = await res.blob();
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            sendResponse({ ok: true, dataUrl: reader.result, mimeType: blob.type || 'video/mp4' });
+          };
+          reader.onerror = () => {
+            sendResponse({ ok: false, error: 'Đọc dữ liệu video xem thử thất bại' });
+          };
+          reader.readAsDataURL(blob);
+        } catch (err) {
+          log.err('Nạp video xem thử thất bại:', err);
+          sendResponse({ ok: false, error: String(err) });
+        }
+      })();
+      return true;
+    }
+
+    if (msg.type === 'content:download-blob') {
+      if (window.top !== window) return undefined;
+      (async () => {
+        try {
+          log.info('Đang tải video blob qua session trang web...', msg.url);
+          let res = await fetch(msg.url, { credentials: 'include' });
+          if (!res.ok && res.status === 403) {
+            log.warn('Fetch kèm credentials bị 403, thử lại không kèm credentials...');
+            res = await fetch(msg.url);
+          }
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const ct = (res.headers.get('content-type') || '').toLowerCase();
+          if (ct.includes('text/html')) {
+            throw new Error('Máy chủ từ chối tải và trả về trang HTML (403 Access Denied)');
+          }
+          const blob = await res.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = blobUrl;
+          let filename = msg.filename || 'video.mp4';
+          if (!/\.[a-z0-9]{2,5}$/i.test(filename)) filename += '.mp4';
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+          log.info('Đã kích hoạt tải blob thành công:', filename);
+          sendResponse({ ok: true });
+        } catch (err) {
+          log.err('Tải video blob thất bại:', err);
+          sendResponse({ ok: false, error: String(err) });
         }
       })();
       return true;
