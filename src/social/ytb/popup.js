@@ -142,6 +142,12 @@ export function parseItemInfo(item) {
 
   const quality = variants[0] ? variants[0].quality : 'HD';
 
+  const videoId = (item.ytMeta && item.ytMeta.videoId) || item.code || null;
+  const author = (item.ytMeta && (item.ytMeta.author || item.ytMeta.channelTitle)) || null;
+  const duration = (item.ytMeta && (item.ytMeta.lengthSeconds || item.ytMeta.duration)) || null;
+  const thumbnail = videoId ? `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg` : (item.poster || null);
+  const isLive = !!(item.ytMeta && item.ytMeta.isLive);
+
   return {
     matched: true,
     platform: 'youtube',
@@ -149,5 +155,10 @@ export function parseItemInfo(item) {
     title,
     quality,
     variants,
+    videoId,
+    author,
+    duration,
+    thumbnail,
+    isLive,
   };
 }

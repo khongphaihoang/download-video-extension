@@ -2,81 +2,197 @@
 <html lang="vi">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Video Grabber</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <header>
-      <h1>Video Grabber</h1>
-      <span id="count" class="badge">0</span>
+    <!-- Header -->
+    <header class="app-header">
+      <div class="app-brand">
+        <div class="brand-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1 class="brand-title">Video Grabber</h1>
+        </div>
+        <span id="count" class="badge" title="Số video đã phát hiện">0</span>
+      </div>
+
+      <div class="header-actions">
+        <button id="rescan" class="icon-btn" title="Quét sâu lại trang (F5 quét media)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+        </button>
+        <button id="clear" class="icon-btn" title="Xoá danh sách của tab">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        </button>
+        <button id="btnToggleDiag" class="icon-btn" title="Chẩn đoán & Debug">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+          </svg>
+        </button>
+        <button id="btnToggleTheme" class="icon-btn" title="Đổi giao diện Sáng / Tối">
+          <svg id="themeIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+        </button>
+      </div>
     </header>
 
-    <div class="toolbar">
-      <button id="rescan" class="btn primary" title="Quét lại trang, bao gồm cả HTML nhúng của Facebook">
-        Quét sâu
-      </button>
-      <button id="copyAll" class="btn" title="Copy tất cả URL đang hiển thị">Copy</button>
-      <button id="clear" class="btn" title="Xoá danh sách của tab này">Xoá</button>
-    </div>
-
-    <div id="filters" class="filters">
+    <!-- Toolbar & Filter Tabs -->
+    <div id="filters" class="filters-bar">
       <button class="chip active" data-kind="current">⚡ Đang xem</button>
       <button class="chip" data-kind="all">Tất cả</button>
-      <button class="chip" data-kind="file">File</button>
-      <button class="chip" data-kind="yt-adaptive">YT-Adapt</button>
+      <button class="chip" data-kind="file">File MP4</button>
+<!--      <button class="chip" data-kind="yt-adaptive">YT-Mux</button>-->
     </div>
 
-    <ul id="list" class="list"></ul>
+    <!-- Main Content Area -->
+    <main id="mainContainer" class="main-content">
+      <!-- Loading / Detecting Skeleton State -->
+      <div id="detectingState" class="state-container detecting-state hidden">
+        <div class="skeleton-card">
+          <div class="skeleton-media-row">
+            <div class="skeleton-box skeleton-thumb"></div>
+            <div class="skeleton-info">
+              <div class="skeleton-box skeleton-title-line"></div>
+              <div class="skeleton-box skeleton-title-line short"></div>
+              <div class="skeleton-box skeleton-tag"></div>
+            </div>
+          </div>
+          <div class="skeleton-pills-row">
+            <div class="skeleton-box skeleton-pill"></div>
+            <div class="skeleton-box skeleton-pill"></div>
+            <div class="skeleton-box skeleton-pill"></div>
+          </div>
+          <div class="skeleton-box skeleton-btn"></div>
+        </div>
+        <p class="detecting-label">
+          <span class="pulse-dot"></span>
+          Đang phát hiện video trên trang…
+        </p>
+      </div>
 
-    <div id="empty" class="empty">
-      <p>Chưa bắt được video nào.</p>
-<!--      <p class="hint">-->
-<!--        Mở trang có video rồi <b>bấm play</b> để extension thấy luồng dữ liệu.<br />-->
-<!--        Với Facebook & Instagram: mở bài viết / Reel, bấm vào video hoặc bấm-->
-<!--        <b>Quét sâu</b>.-->
-<!--      </p>-->
-    </div>
+      <!-- Empty State -->
+      <div id="empty" class="state-container empty-state">
+        <div class="empty-icon-wrap">
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect>
+            <line x1="7" y1="2" x2="7" y2="22"></line>
+            <line x1="17" y1="2" x2="17" y2="22"></line>
+            <line x1="2" y1="12" x2="22" y2="12"></line>
+            <line x1="2" y1="7" x2="7" y2="7"></line>
+            <line x1="2" y1="17" x2="7" y2="17"></line>
+            <line x1="17" y1="17" x2="22" y2="17"></line>
+            <line x1="17" y1="7" x2="22" y2="7"></line>
+          </svg>
+        </div>
+        <h2 class="empty-title">Chưa phát hiện video</h2>
+        <p class="empty-desc">
+          Mở video trên trang web rồi bấm <b>Play</b> để tiện ích phát hiện luồng tải.
+        </p>
+        <div class="empty-platforms">
+          <span class="platform-chip yt">YouTube</span>
+          <span class="platform-chip fb">Facebook</span>
+          <span class="platform-chip tt">TikTok</span>
+          <span class="platform-chip ig">Instagram</span>
+          <span class="platform-chip web">Web Video</span>
+        </div>
+        <button id="btnEmptyRescan" class="btn btn-outline empty-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+          Quét sâu lại trang
+        </button>
+      </div>
 
-<!--    <div id="ytNotice" class="yt-notice hidden">-->
-<!--      <div class="yt-notice-icon">▶️</div>-->
-<!--      <p class="yt-notice-title">YouTube — hạn chế đã biết</p>-->
-<!--      <p class="yt-notice-desc">-->
-<!--        YouTube ký link theo phiên (<b>n-sig</b>) nên link lấy từ player response-->
-<!--        thường bị trả <b>403</b> khi tải thẳng — trước đây Chrome lưu về file-->
-<!--        <b>.txt</b> rác. Extension giờ kiểm tra trước và báo lỗi rõ ràng.<br />-->
-<!--        Link gắn nhãn <b>live</b> là link bắt từ chính request của player — loại-->
-<!--        này tải được. Hãy bấm <b>Play</b> rồi <b>Quét sâu</b> để có link live.<br />-->
-<!--        <b>file</b> = video+audio · <b>yt-adapt</b> = chỉ hình hoặc chỉ tiếng.-->
-<!--      </p>-->
-<!--    </div>-->
+      <!-- Results View -->
+      <div id="resultsContainer" class="results-container hidden">
+        <!-- Hero: Current / Primary Video Card -->
+        <div id="heroCardWrap" class="hero-card-wrap"></div>
 
-    <details id="diagWrap" class="diag">
+        <!-- Secondary List: Other Detected Videos -->
+        <div id="otherSection" class="other-section hidden">
+          <div class="other-section-header">
+            <span class="other-section-title">Các video khác đã phát hiện</span>
+            <span id="otherCountBadge" class="other-count-badge">0</span>
+          </div>
+          <ul id="list" class="list"></ul>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer Secondary Actions (Bulk actions) -->
+    <footer id="footerBar" class="footer-bar hidden">
+      <div class="footer-actions">
+        <button id="downloadAll" class="btn btn-secondary btn-sm" disabled>Tải tất cả</button>
+        <button id="copyAll" class="btn btn-ghost btn-sm">Copy tất cả URL</button>
+      </div>
+    </footer>
+
+    <!-- Diagnostic & Debug Drawer -->
+    <details id="diagWrap" class="diag-drawer">
       <summary class="diag-summary">
-        <span>🛠️ Chẩn đoán & Debug</span>
+        <div class="diag-summary-left">
+          <span class="diag-title">🛠️ Chẩn đoán & Debug</span>
+        </div>
         <span id="connStatus" class="diag-badge-status">Kiểm tra…</span>
       </summary>
 
-      <div class="diag-toolbar">
-        <button id="btnReloadExt" class="btn diag-btn" title="Nạp lại Extension và F5 trang hiện tại">🔄 Reload Ext & Tab</button>
-        <button id="btnCopyDiag" class="btn diag-btn" title="Copy toàn bộ thông tin chẩn đoán">📋 Copy Log</button>
-      </div>
+      <div class="diag-content">
+        <div class="diag-toolbar">
+          <button id="btnReloadExt" class="btn btn-sm btn-outline" title="Nạp lại Extension và F5 trang hiện tại">🔄 Reload Ext & Tab</button>
+          <button id="btnCopyDiag" class="btn btn-sm btn-outline" title="Copy toàn bộ thông tin chẩn đoán">📋 Copy Log</button>
+        </div>
 
-      <div class="diag-badges-grid">
-        <div id="statContent" class="diag-badge-item">Content: <b id="statContentVal">--</b></div>
-        <div id="statInject" class="diag-badge-item">Inject: <b id="statInjectVal">--</b></div>
-      </div>
+        <div class="diag-theme-picker">
+          <div class="diag-theme-title">Palette màu giao diện:</div>
+          <div class="theme-buttons-grid" id="themePicker">
+            <button type="button" class="theme-btn active" data-theme="dark">🌙 Dark</button>
+            <button type="button" class="theme-btn" data-theme="theme-apple">🍎 Apple Light</button>
+            <button type="button" class="theme-btn" data-theme="theme-linear">⚡ Linear Tech</button>
+            <button type="button" class="theme-btn" data-theme="theme-frost">❄️ Nordic Frost</button>
+            <button type="button" class="theme-btn" data-theme="theme-warm">📜 Warm Paper</button>
+          </div>
+        </div>
 
-      <pre id="diag">Đang kiểm tra…</pre>
+        <div class="diag-badges-grid">
+          <div class="diag-badge-item">Content Script: <b id="statContentVal">--</b></div>
+          <div class="diag-badge-item">MAIN Inject: <b id="statInjectVal">--</b></div>
+        </div>
 
-      <div id="diagLogsWrap" class="diag-logs-wrap">
-        <div class="diag-logs-title">Sự kiện gần nhất (Live Logs):</div>
-        <div id="diagLogs" class="diag-logs-list"></div>
+        <pre id="diag">Đang kiểm tra…</pre>
+
+        <div class="diag-logs-wrap">
+          <div class="diag-logs-title">Sự kiện gần nhất (Live Logs):</div>
+          <div id="diagLogs" class="diag-logs-list"></div>
+        </div>
       </div>
     </details>
 
-    <footer>
-      <button id="downloadAll" class="btn primary wide" disabled>Tải tất cả</button>
-      <div id="status" class="status"></div>
-    </footer>
+    <!-- Status Toast / Alert -->
+    <div id="status" class="status-toast hidden"></div>
 
     <script type="module" src="popup.js"></script>
   </body>

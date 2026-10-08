@@ -61,6 +61,8 @@ export function parseItemInfo(item) {
     title,
     quality,
     code,
+    thumbnail: item.poster || null,
+    author: item.author || 'TikTok',
   };
 }
 

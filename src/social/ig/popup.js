@@ -42,7 +42,9 @@ export function parseItemInfo(item, facebookPage = false) {
     platform: 'instagram',
     platformName: 'Instagram',
     title,
-    quality: 'HD MP4',
+    quality,
     shortcode,
+    thumbnail: item.poster || null,
+    author: 'Instagram',
   };
 }

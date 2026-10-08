@@ -311,6 +311,8 @@ export function parseItemInfo(item) {
       quality: primaryQuality,
       videoCode,
       variants,
+      thumbnail: item.poster || null,
+      author: 'Facebook',
     };
   }
 
