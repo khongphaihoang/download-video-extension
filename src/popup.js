@@ -300,7 +300,11 @@ function parseItemInfo(item) {
 
   for (const module of socialModules) {
     if (typeof module.parseItemInfo !== 'function') continue;
-    info = module.parseItemInfo(item, isFbTab);
+    try {
+      info = module.parseItemInfo(item, isFbTab);
+    } catch (err) {
+      console.warn('[Popup] Error in social module parseItemInfo:', err);
+    }
     if (info) break;
   }
 
@@ -399,6 +403,7 @@ function visibleItems() {
     const currentTabCode = matchYtVideoCode(currentTabUrl)
       || (fb.matchVideoCode && fb.matchVideoCode(currentTabUrl))
       || (tiktok.matchVideoCode && tiktok.matchVideoCode(currentTabUrl))
+      || (ig.matchVideoCode && ig.matchVideoCode(currentTabUrl))
       || null;
 
     if (currentTabCode) {

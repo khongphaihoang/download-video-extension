@@ -10,19 +10,46 @@
   const IG_KEYS = [
     'video_url',
     'playback_url',
+    'browser_native_hd_url',
+    'browser_native_sd_url',
   ];
 
   const seenIgNodes = new WeakSet();
 
   function unescapeJson(s) {
+    if (typeof s !== 'string') return '';
     return s
       .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
       .replace(/\\\//g, '/')
-      .replace(/\\\\/g, '\\');
+      .replace(/\\\\/g, '\\')
+      .replace(/&amp;/g, '&')
+      .trim();
   }
 
   function isInstagramPage() {
     return /(^|\.)instagram\.com$/i.test(location.hostname);
+  }
+
+  function cleanMediaUrl(raw) {
+    if (typeof raw !== 'string') return raw;
+    try {
+      const u = new URL(raw);
+      if (u.searchParams.has('bytestart') || u.searchParams.has('byteend')) {
+        if (/(^|\.)(cdninstagram\.com|fbcdn\.net)$/i.test(u.hostname) || isInstagramPage()) {
+          u.searchParams.delete('bytestart');
+          u.searchParams.delete('byteend');
+          return u.toString();
+        }
+      }
+    } catch { /* ignore */ }
+    return raw;
+  }
+
+  function matchVideoCode(href) {
+    if (!href) return null;
+    const match = href.match(/instagram\.com\/(?:reel|reels|p)\/([A-Za-z0-9_-]+)/i)
+      || href.match(/\/(?:reel|reels|p)\/([A-Za-z0-9_-]+)/i);
+    return match ? match[1] : null;
   }
 
   function extractIgJson(text, addFn, bumpStat) {
@@ -34,20 +61,38 @@
       !text.includes('video_resources') &&
       !text.includes('/t16/') &&
       !text.includes('/t50.') &&
-      !text.includes('BaseURL')
+      !text.includes('/t64.') &&
+      !text.includes('BaseURL') &&
+      !text.includes('browser_native_') &&
+      !text.includes('cdninstagram.com')
     ) {
       return;
     }
 
-    // 1. Quét các key trực tiếp: video_url, playback_url
+    const currentCode = matchVideoCode(location.href);
+    const meta = {
+      label: currentCode ? 'Đang phát' : 'Instagram Video',
+      code: currentCode || null,
+      isCurrent: !!currentCode,
+      pageUrl: location.href,
+      title: document.title || 'Instagram Video',
+    };
+
+    function recordFound(rawUrl, labelOverride) {
+      const clean = cleanMediaUrl(unescapeJson(rawUrl));
+      if (!/^https?:\/\//i.test(clean)) return;
+      if (/(\/v\/t51\.|\/t51\.2885|dst-jpg|dst-webp|\.jpe?g|\.png|\.webp)/i.test(clean)) return;
+      if (addFn(clean, 'ig-json', { ...meta, label: labelOverride || meta.label })) {
+        if (bumpStat) bumpStat('ig-json');
+      }
+    }
+
+    // 1. Quét các key trực tiếp: video_url, playback_url, browser_native_hd_url, browser_native_sd_url
     for (const key of IG_KEYS) {
       const re = new RegExp('"' + key + '"\\s*:\\s*"([^"]{20,4000})"', 'g');
       let m;
       while ((m = re.exec(text)) !== null) {
-        const url = unescapeJson(m[1]);
-        if (/^https?:\/\//i.test(url) && addFn(url, 'ig-json', { label: key })) {
-          if (bumpStat) bumpStat('ig-json');
-        }
+        recordFound(m[1], key);
       }
     }
 
@@ -59,10 +104,7 @@
       const urlRe = /"url"\s*:\s*"([^"]{20,4000})"/g;
       let um;
       while ((um = urlRe.exec(block)) !== null) {
-        const url = unescapeJson(um[1]);
-        if (/^https?:\/\//i.test(url) && addFn(url, 'ig-json', { label: 'ig-version' })) {
-          if (bumpStat) bumpStat('ig-json');
-        }
+        recordFound(um[1], 'ig-version');
       }
     }
 
@@ -74,10 +116,7 @@
       const srcRe = /"src"\s*:\s*"([^"]{20,4000})"/g;
       let sm;
       while ((sm = srcRe.exec(block)) !== null) {
-        const url = unescapeJson(sm[1]);
-        if (/^https?:\/\//i.test(url) && addFn(url, 'ig-json', { label: 'ig-resource' })) {
-          if (bumpStat) bumpStat('ig-json');
-        }
+        recordFound(sm[1], 'ig-resource');
       }
     }
 
@@ -85,19 +124,18 @@
     const buRe = /<BaseURL>([^<]{20,4000})<\/BaseURL>/g;
     let bm;
     while ((bm = buRe.exec(text)) !== null) {
-      const url = unescapeJson(bm[1]);
-      if (/^https?:\/\//i.test(url) && addFn(url, 'ig-json', { label: 'ig-manifest' })) {
-        if (bumpStat) bumpStat('ig-json');
-      }
+      recordFound(bm[1], 'ig-manifest');
     }
 
-    // 5. Quét regex trực tiếp format video Instagram (/t16/ hoặc /t50.)
-    const igDirectRe = /https?:\\\/\\\/[a-zA-Z0-9.-]*(?:cdninstagram\.com|fbcdn\.net)\\\/(?:o1\\\/v\\\/t16|v\\\/t50\.)[^\s"'\\]+/g;
-    let dm;
-    while ((dm = igDirectRe.exec(text)) !== null) {
-      const url = unescapeJson(dm[0]);
-      if (/^https?:\/\//i.test(url) && addFn(url, 'ig-json', { label: 'Instagram Video' })) {
-        if (bumpStat) bumpStat('ig-json');
+    // 5. Quét regex trực tiếp format video Instagram (cả dạng URL escape \/ và //)
+    const directRes = [
+      /https?:\\\/\\\/[a-zA-Z0-9.-]*(?:cdninstagram\.com|fbcdn\.net)\\\/(?:o1\\\/v\\\/t16|v\\\/t50\.|v\\\/t64\.|o1\\\/v\\\/t24)[^\s"'\\]+/g,
+      /https?:\/\/[a-zA-Z0-9.-]*(?:cdninstagram\.com|fbcdn\.net)\/(?:o1\/v\/t16|v\/t50\.|v\/t64\.|o1\/v\/t24)[^\s"'\\]+/g,
+    ];
+    for (const re of directRes) {
+      let dm;
+      while ((dm = re.exec(text)) !== null) {
+        recordFound(dm[0], 'Instagram Video');
       }
     }
   }
@@ -107,20 +145,43 @@
 
     isPage: isInstagramPage,
     matchPage: isInstagramPage,
+    cleanMediaUrl,
+    normalize: cleanMediaUrl,
+    matchVideoCode,
 
     isCandidate(url, host, source, extra) {
       const isIgPage = isInstagramPage();
       const isIgHost = /(^|\.)(fbcdn\.net|cdninstagram\.com)$/i.test(host);
-      const isIgSource = source === 'ig-json' || source === 'inject:ig-response'
-        || source === 'inject:ig-single-post' || source === 'inject:shortcode-match'
-        || source === 'inject:shortcode-resolved' || source === 'inject:react-fiber'
-        || source === 'video-tag' || source === 'source-tag'
-        || source === 'inject:media-src' || source === 'inject:video-src'
-        || (source === 'network-media' && extra && extra.label === 'video')
-        || /\/(?:o1\/v\/t16|v\/t50\.)/i.test(url);
 
-      const isIg = (isIgPage && isIgHost && isIgSource) || host.includes('instagram')
-        || url.includes('/o1/v/t16/') || (typeof source === 'string' && source.includes('ig'));
+      // Loại bỏ ảnh
+      if (/(\/v\/t51\.|\/t51\.2885|dst-jpg|dst-webp|\.jpe?g|\.png|\.webp)/i.test(url)) return false;
+
+      const isIgSource = source === 'ig-json'
+        || source === 'inject:ig-response'
+        || source === 'inject:ig-single-post'
+        || source === 'inject:shortcode-match'
+        || source === 'inject:shortcode-resolved'
+        || source === 'inject:react-fiber'
+        || source === 'inject:ig-active-stream'
+        || source === 'video-tag'
+        || source === 'source-tag'
+        || source === 'video-play'
+        || source === 'video-playing'
+        || source === 'video-click'
+        || source === 'reels-active'
+        || source === 'inject:media-src'
+        || source === 'inject:video-src'
+        || source === 'network-media'
+        || (typeof source === 'string' && source.includes('ig'));
+
+      const hasVideoPath = /\/(?:o1\/v\/t16|v\/t50\.|v\/t64\.|o1\/v\/t24|o1\/v\/t72)/i.test(url)
+        || /\.(mp4|m4v)(\?|#|$)/i.test(url)
+        || /mime_type=video_mp4/i.test(url);
+
+      const isIg = (isIgPage && isIgHost && (isIgSource || hasVideoPath))
+        || (isIgPage && hasVideoPath)
+        || host.includes('cdninstagram.com')
+        || (typeof source === 'string' && source.includes('ig'));
 
       return isIg;
     },
@@ -138,14 +199,6 @@
       seenIgNodes.add(s);
       const t = s.textContent;
       if (!t || t.length < 80) return;
-      if (
-        !t.includes('video_versions') &&
-        !t.includes('video_url') &&
-        !t.includes('playback_url') &&
-        !t.includes('video_resources')
-      ) {
-        return;
-      }
       extractIgJson(t, addFn, bumpStat);
     },
 
@@ -157,12 +210,6 @@
       try {
         extractIgJson(root.innerHTML, addFn, bumpStat);
       } catch { /* ignore */ }
-    },
-
-    matchVideoCode(href) {
-      if (!href) return null;
-      const match = href.match(/\/(?:reel|reels|p)\/([A-Za-z0-9_-]+)/i);
-      return match ? match[1] : null;
     },
 
     extractIgJson,
